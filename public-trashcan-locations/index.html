@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cleveland public trash cans by ward</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --accent:#F4C913;
+    --ink:#404F54;
+    --teal:#23685b;
+    --teal-mid:#5fa896;
+    --teal-light:#a9d2cf;
+    --teal-pale:#dbe7e3;
+    --gray:#879599;
+    --gray-line:#ccd8db;
+    --rc:'Roboto Condensed','Arial Narrow',sans-serif;
+    --inter:'Inter',Arial,sans-serif;
+    --gotham:'Gotham','Gotham Medium',sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Body: transparent, flex-centered. No min-height:100vh -- it makes embed
+     heights ratchet upward. */
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    color: var(--ink);
+    font-family: var(--inter);
+  }
+
+  .viz-container {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    background: #fff;
+  }
+  .viz-container::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--accent);
+  }
+
+  /* ---- header ---- */
+  .viz-header { padding: 20px 20px 16px; }
+  .viz-kicker {
+    font-family: var(--gotham);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: .65;
+    margin-bottom: 6px;
+  }
+  .viz-heading {
+    font-family: var(--rc);
+    font-weight: 700;
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 0 0 6px;
+  }
+  .viz-subheading {
+    font-family: var(--inter);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.5;
+    opacity: .72;
+    margin: 0;
+  }
+
+  /* ---- standfirst line under the heading ---- */
+  .viz-controls {
+    padding: 0 20px 14px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toggle-hint {
+    font-family: var(--inter);
+    font-size: 12px;
+    opacity: .55;
+  }
+
+  /* ---- body ---- */
+  .viz-body { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .map-wrap {
+    position: relative;
+    flex: 1 1 520px;
+    min-width: 300px;
+    height: 560px;
+  }
+  #map { position: absolute; inset: 0; background: #223; }
+  .viz-side {
+    flex: 0 1 320px;
+    min-width: 280px;
+    height: 560px;
+    overflow-y: auto;
+    padding: 0 20px 16px;
+  }
+  .viz-side h2 {
+    font-family: var(--rc);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: .55;
+    margin: 0 0 8px;
+    padding-top: 2px;
+  }
+
+  table { border-collapse: collapse; width: 100%; font-family: var(--inter); font-size: 12px; }
+  th, td { text-align: right; padding: 6px 4px; border-bottom: 1px solid rgba(64,79,84,0.12); }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: .55;
+    position: sticky;
+    top: 0;
+    background: #fff;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: rgba(35,104,91,0.06); }
+  tbody tr.selected { background: rgba(244,201,19,0.18); }
+
+  /* ---- legend ---- */
+  /* Sits top-right inside the map; MapLibre's attribution owns bottom-right. */
+  .legend {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    background: #fff;
+    padding: 10px 12px;
+    border-radius: 2px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+  }
+  .legend-title {
+    font-family: var(--rc);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: .55;
+    margin-bottom: 6px;
+  }
+  .legend-chip {
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    line-height: 1.7;
+    color: var(--ink);
+  }
+  .legend-chip .dot,
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1px solid rgba(64,79,84,0.28);
+    flex: none;
+    display: inline-block;
+  }
+  .swatch { margin-right: 7px; vertical-align: middle; }
+
+  /* detail-view legend: what a marker means */
+  .legend-can {
+    width: 17px; height: 17px; flex: none;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid rgba(64,79,84,0.45);
+    font-size: 10px;
+    line-height: 15px;
+    text-align: center;
+  }
+  .legend-badge {
+    width: 15px; height: 15px; flex: none;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--ink);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 12px;
+    text-align: center;
+  }
+
+  /* ---- reset button ---- */
+  .map-reset {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    border-radius: 2px;
+    background: #fff;
+    border: 1px solid var(--gray-line);
+    color: var(--ink);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.28);
+    display: none;
+  }
+  .map-reset.show { display: block; }
+  .map-reset:hover { border-color: var(--teal); }
+
+  /* ---- tooltip ---- */
+  /* Canonical .bar-tooltip spec. MapLibre has no sticky-tooltip primitive, so
+     this is a plain div we move with the cursor (see showTip/hideTip). */
+  .bar-tooltip {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .12s;
+    background: var(--ink);
+    color: #fff;
+    font-family: var(--inter);
+    font-size: 0.75rem;
+    padding: 12px 16px;
+    border-radius: 2px;
+    max-width: 280px;
+    min-width: 180px;
+    border: 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    white-space: normal;
+  }
+  .bar-tooltip.visible { opacity: 1; }
+  .bar-tooltip .tt-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .bar-tooltip .tt-total,
+  .bar-tooltip .tt-sub {
+    font-size: 0.68rem;
+    opacity: .55;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.25);
+  }
+  .bar-tooltip .tt-row { display: flex; align-items: center; gap: 7px; line-height: 1.7; }
+  .bar-tooltip .tt-row .dot {
+    width: 9px; height: 9px; border-radius: 2px; flex: none;
+    border: 1px solid rgba(255,255,255,0.28);
+  }
+  .bar-tooltip .tt-count,
+  .bar-tooltip .tt-val { font-weight: 600; margin-left: auto; }
+
+  /* ---- notes ---- */
+  .viz-source {
+    font-family: var(--inter);
+    font-size: 11px;
+    opacity: .5;
+    padding: 16px 20px 20px;
+    line-height: 1.5;
+  }
+  .viz-source a { color: inherit; }
+
+  /* MapLibre's attribution over imagery: keep it legible but quiet. */
+  .maplibregl-ctrl-attrib {
+    font-family: var(--inter);
+    font-size: 10px;
+  }
+  .maplibregl-canvas:focus { outline: none; }
+</style>
+</head>
+<body>
+
+<div class="viz-container">
+
+  <div class="viz-header">
+    <div class="viz-kicker">Signal Cleveland</div>
+    <h1 class="viz-heading" id="heading"></h1>
+    <p class="viz-subheading" id="subheading"></p>
+  </div>
+
+  <div class="viz-controls">
+    <span class="toggle-hint">Darker shading means more cans. Select a ward to zoom in and see every can on it, then press a can to go down to it.</span>
+  </div>
+
+  <div class="viz-body">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <button class="map-reset" id="reset">Whole city</button>
+      <div class="legend" id="legend"></div>
+      <div class="bar-tooltip" id="tip"></div>
+    </div>
+    <div class="viz-side">
+      <h2>Ranked wards</h2>
+      <table id="tbl">
+        <thead><tr><th>Ward</th><th>Cans</th><th>Population</th><th>Per 10k</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="viz-source" id="source"></div>
+
+</div>
+
+<script>
+const DATA = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{"ward":1,"name":"Ward 1","council_member":"Joseph T. Jones","email":"jjones@clevelandcitycouncil.gov","phone":"216-664-4944","count":26,"population":22836,"pop_moe":1525,"per_10k":11.4,"per_10k_moe":0.8,"count_class":0,"rate_class":0},"geometry":{"type":"Polygon","coordinates":[[[-81.5781,41.4718],[-81.5767,41.4709],[-81.5768,41.4653],[-81.5724,41.4653],[-81.5725,41.4571],[-81.5457,41.4572],[-81.5457,41.4425],[-81.5554,41.4425],[-81.5554,41.4355],[-81.5523,41.4344],[-81.5522,41.4278],[-81.5547,41.4278],[-81.5547,41.4244],[-81.568,41.4243],[-81.568,41.4298],[-81.5705,41.4298],[-81.5706,41.4314],[-81.5807,41.4309],[-81.5807,41.4349],[-81.5845,41.4349],[-81.5845,41.4418],[-81.5911,41.4417],[-81.5911,41.449],[-81.584,41.4491],[-81.5846,41.453],[-81.5833,41.453],[-81.5833,41.4575],[-81.586,41.4584],[-81.586,41.4641],[-81.5847,41.4644],[-81.5859,41.4646],[-81.5859,41.4684],[-81.5847,41.4684],[-81.5847,41.4718],[-81.5781,41.4718]]]}},{"type":"Feature","properties":{"ward":2,"name":"Ward 2","council_member":"Kevin L. Bishop","email":"kbishop@clevelandcitycouncil.gov","phone":"216-664-4945","count":38,"population":20805,"pop_moe":1613,"per_10k":18.3,"per_10k_moe":1.4,"count_class":0,"rate_class":1},"geometry":{"type":"Polygon","coordinates":[[[-81.5943,41.4616],[-81.5943,41.4587],[-81.5833,41.4575],[-81.5833,41.453],[-81.5846,41.453],[-81.584,41.4491],[-81.5911,41.449],[-81.5911,41.4417],[-81.6152,41.4416],[-81.6152,41.4344],[-81.6333,41.4341],[-81.6333,41.4415],[-81.6364,41.4414],[-81.6345,41.4412],[-81.6356,41.4398],[-81.6399,41.4392],[-81.6447,41.4392],[-81.6447,41.4412],[-81.6508,41.4411],[-81.651,41.451],[-81.6539,41.4532],[-81.6571,41.4531],[-81.6571,41.4558],[-81.6386,41.4563],[-81.6357,41.4592],[-81.6116,41.4592],[-81.6116,41.4615],[-81.5943,41.4616]]]}},{"type":"Feature","properties":{"ward":3,"name":"Ward 3","council_member":"Deborah Gray","email":"dgray@clevelandcitycouncil.gov","phone":"216-664-4941","count":51,"population":22524,"pop_moe":2030,"per_10k":22.6,"per_10k_moe":2.0,"count_class":2,"rate_class":2},"geometry":{"type":"Polygon","coordinates":[[[-81.5848,41.4855],[-81.5847,41.4684],[-81.5859,41.4684],[-81.5859,41.4646],[-81.5847,41.4644],[-81.586,41.4641],[-81.586,41.4584],[-81.5847,41.4575],[-81.5943,41.4587],[-81.5943,41.4616],[-81.6116,41.4615],[-81.6116,41.4592],[-81.6357,41.4592],[-81.6386,41.4563],[-81.6571,41.4558],[-81.657,41.4613],[-81.6617,41.4799],[-81.6433,41.4804],[-81.6406,41.474],[-81.6328,41.473],[-81.6326,41.4634],[-81.6147,41.4636],[-81.6145,41.4682],[-81.617,41.471],[-81.6215,41.472],[-81.6204,41.478],[-81.6071,41.4781],[-81.6071,41.4815],[-81.6043,41.4812],[-81.6029,41.4788],[-81.5991,41.4788],[-81.5991,41.4806],[-81.5905,41.4797],[-81.5911,41.4841],[-81.5895,41.4871],[-81.5848,41.4867],[-81.5848,41.4855]]]}},{"type":"Feature","properties":{"ward":4,"name":"Ward 4","council_member":"Kris Harsh","email":"kharsh@clevelandcitycouncil.gov","phone":"216-664-2943","count":23,"population":20490,"pop_moe":1457,"per_10k":11.2,"per_10k_moe":0.8,"count_class":0,"rate_class":0},"geometry":{"type":"Polygon","coordinates":[[[-81.6826,41.4441],[-81.6774,41.4441],[-81.678,41.4417],[-81.6749,41.4395],[-81.6722,41.4385],[-81.6698,41.4402],[-81.669,41.4382],[-81.6636,41.4367],[-81.6636,41.4347],[-81.6662,41.4329],[-81.6778,41.4327],[-81.6773,41.4227],[-81.6797,41.4221],[-81.6782,41.4212],[-81.6846,41.4194],[-81.7344,41.4186],[-81.7344,41.4238],[-81.7286,41.4239],[-81.7286,41.4356],[-81.7327,41.4365],[-81.7179,41.4364],[-81.7179,41.4391],[-81.7069,41.439],[-81.7055,41.4408],[-81.7083,41.4422],[-81.7049,41.4416],[-81.7029,41.4455],[-81.6982,41.4442],[-81.6893,41.4486],[-81.6847,41.4474],[-81.6826,41.4441]]]}},{"type":"Feature","properties":{"ward":5,"name":"Ward 5","council_member":"Richard A. Starr","email":"rstarr@clevelandcitycouncil.gov","phone":"216-664-2309","count":64,"population":25905,"pop_moe":1655,"per_10k":24.7,"per_10k_moe":1.6,"count_class":2,"rate_class":2},"geometry":{"type":"Polygon","coordinates":[[[-81.6518,41.5058],[-81.6518,41.5043],[-81.6335,41.5038],[-81.6333,41.4875],[-81.6271,41.4807],[-81.6271,41.474],[-81.6291,41.467],[-81.6327,41.4671],[-81.6328,41.473],[-81.6384,41.4731],[-81.6417,41.4748],[-81.6433,41.4804],[-81.6617,41.4799],[-81.657,41.4613],[-81.6571,41.4558],[-81.6813,41.4551],[-81.6814,41.4511],[-81.6799,41.4506],[-81.6809,41.4493],[-81.6838,41.4553],[-81.6829,41.4606],[-81.6793,41.4641],[-81.6732,41.4652],[-81.669,41.4699],[-81.6694,41.4733],[-81.6756,41.4803],[-81.6808,41.4892],[-81.691,41.4864],[-81.6874,41.4919],[-81.6841,41.4939],[-81.6902,41.4965],[-81.6988,41.4971],[-81.6848,41.5042],[-81.6837,41.5029],[-81.6804,41.5033],[-81.68,41.5012],[-81.6746,41.5018],[-81.675,41.5038],[-81.6518,41.5058]]]}},{"type":"Feature","properties":{"ward":6,"name":"Ward 6","council_member":"Blaine A. Griffin","email":"bgriffin@clevelandcitycouncil.gov","phone":"216-664-4234","count":49,"population":22030,"pop_moe":1208,"per_10k":22.2,"per_10k_moe":1.2,"count_class":1,"rate_class":1},"geometry":{"type":"Polygon","coordinates":[[[-81.5991,41.518],[-81.5981,41.5179],[-81.598,41.5159],[-81.5913,41.5159],[-81.5913,41.5087],[-81.5953,41.5087],[-81.598,41.505],[-81.5979,41.501],[-81.603,41.501],[-81.603,41.495],[-81.5935,41.4928],[-81.5935,41.4876],[-81.5895,41.4871],[-81.5911,41.4841],[-81.5905,41.4797],[-81.5991,41.4806],[-81.5991,41.4788],[-81.6029,41.4788],[-81.6043,41.4812],[-81.6071,41.4815],[-81.6071,41.4781],[-81.6204,41.478],[-81.6215,41.472],[-81.617,41.471],[-81.6145,41.4682],[-81.6147,41.4636],[-81.6326,41.4634],[-81.6327,41.4671],[-81.6291,41.467],[-81.6271,41.474],[-81.6271,41.4807],[-81.6333,41.4875],[-81.6335,41.506],[-81.6364,41.506],[-81.6364,41.509],[-81.6154,41.5105],[-81.6149,41.5115],[-81.6147,41.5086],[-81.6121,41.5067],[-81.6118,41.5038],[-81.6054,41.5089],[-81.6072,41.5101],[-81.6046,41.512],[-81.6047,41.5171],[-81.5991,41.518]]]}},{"type":"Feature","properties":{"ward":7,"name":"Ward 7","council_member":"Austin N. Davis","email":"adavis@clevelandcitycouncil.gov","phone":"216-664-2691","count":106,"population":28448,"pop_moe":1325,"per_10k":37.3,"per_10k_moe":1.7,"count_class":3,"rate_class":3},"geometry":{"type":"Polygon","coordinates":[[[-81.6984,41.5046],[-81.7036,41.5021],[-81.6988,41.4971],[-81.6902,41.4965],[-81.6841,41.4939],[-81.6874,41.4919],[-81.691,41.4864],[-81.6808,41.4892],[-81.6756,41.4803],[-81.6704,41.475],[-81.669,41.4699],[-81.6817,41.4702],[-81.6855,41.4668],[-81.6906,41.4661],[-81.693,41.4742],[-81.71,41.474],[-81.7163,41.472],[-81.7226,41.4718],[-81.7269,41.4696],[-81.7301,41.4696],[-81.7302,41.475],[-81.7349,41.4736],[-81.7355,41.4853],[-81.7375,41.4853],[-81.7376,41.4872],[-81.7325,41.4897],[-81.7344,41.4942],[-81.7302,41.4964],[-81.7259,41.4962],[-81.7139,41.5025],[-81.6892,41.5172],[-81.6903,41.5184],[-81.6649,41.5328],[-81.6614,41.5292],[-81.6681,41.5254],[-81.6676,41.522],[-81.6984,41.5046]]]}},{"type":"Feature","properties":{"ward":8,"name":"Ward 8","council_member":"Stephanie D. Howse-Jones","email":"showsejones@clevelandcitycouncil.gov","phone":"216-664-2908","count":65,"population":22695,"pop_moe":1459,"per_10k":28.6,"per_10k_moe":1.8,"count_class":2,"rate_class":2},"geometry":{"type":"Polygon","coordinates":[[[-81.6284,41.5462],[-81.627,41.5452],[-81.627,41.5397],[-81.6155,41.5453],[-81.6155,41.5388],[-81.6299,41.5323],[-81.626,41.5256],[-81.6185,41.5197],[-81.6186,41.5145],[-81.6154,41.5105],[-81.6364,41.509],[-81.6364,41.506],[-81.6335,41.506],[-81.6335,41.5038],[-81.6518,41.5043],[-81.6518,41.506],[-81.675,41.5038],[-81.6746,41.5018],[-81.68,41.5012],[-81.6804,41.5033],[-81.6837,41.5029],[-81.6848,41.5042],[-81.6988,41.4971],[-81.7036,41.5021],[-81.6676,41.522],[-81.6681,41.5254],[-81.6614,41.5292],[-81.6623,41.5302],[-81.6484,41.5375],[-81.6467,41.5358],[-81.6424,41.5382],[-81.6359,41.5478],[-81.6309,41.5487],[-81.6284,41.5462]]]}},{"type":"Feature","properties":{"ward":9,"name":"Ward 9","council_member":"Kevin Conwell","email":"kconwell@clevelandcitycouncil.gov","phone":"216-664-4252","count":65,"population":24368,"pop_moe":1806,"per_10k":26.7,"per_10k_moe":2.0,"count_class":2,"rate_class":2},"geometry":{"type":"Polygon","coordinates":[[[-81.5823,41.5702],[-81.5822,41.5684],[-81.5798,41.5685],[-81.5799,41.5671],[-81.5754,41.5683],[-81.5755,41.561],[-81.5852,41.5579],[-81.5852,41.5505],[-81.5754,41.5533],[-81.5753,41.5452],[-81.5915,41.545],[-81.5914,41.5304],[-81.5982,41.5304],[-81.5981,41.5179],[-81.6047,41.5171],[-81.6046,41.512],[-81.6072,41.5101],[-81.6054,41.5089],[-81.6118,41.5038],[-81.6121,41.5067],[-81.6147,41.5087],[-81.6143,41.5111],[-81.6186,41.5145],[-81.6184,41.5196],[-81.626,41.5256],[-81.6299,41.5323],[-81.6155,41.5388],[-81.6155,41.5453],[-81.5915,41.5561],[-81.5915,41.5617],[-81.5886,41.564],[-81.5885,41.5665],[-81.5854,41.5665],[-81.5862,41.5685],[-81.5823,41.5702]]]}},{"type":"Feature","properties":{"ward":10,"name":"Ward 10","council_member":"Michael D. Polensek","email":"mpolensek@clevelandcitycouncil.gov","phone":"216-664-4236","count":102,"population":25653,"pop_moe":1628,"per_10k":39.8,"per_10k_moe":2.5,"count_class":3,"rate_class":3},"geometry":{"type":"Polygon","coordinates":[[[-81.5499,41.5897],[-81.5402,41.589],[-81.5388,41.58],[-81.5416,41.578],[-81.5416,41.5761],[-81.5381,41.5753],[-81.5365,41.5734],[-81.5538,41.5616],[-81.5449,41.5567],[-81.543,41.5516],[-81.5329,41.5454],[-81.5441,41.5453],[-81.5463,41.5465],[-81.5464,41.5453],[-81.5658,41.5453],[-81.5681,41.548],[-81.5709,41.5452],[-81.5753,41.5452],[-81.5754,41.5533],[-81.5852,41.5505],[-81.5852,41.5579],[-81.5755,41.561],[-81.5754,41.5683],[-81.5799,41.5671],[-81.5798,41.5685],[-81.5822,41.5684],[-81.5823,41.571],[-81.5866,41.5682],[-81.592,41.5723],[-81.5856,41.5769],[-81.5826,41.5746],[-81.5726,41.5821],[-81.5655,41.5898],[-81.5621,41.5901],[-81.55,41.6006],[-81.5499,41.5897]]]}},{"type":"Feature","properties":{"ward":11,"name":"Ward 11","council_member":"Nikki Hudson","email":"nhudson@clevelandcitycouncil.gov","phone":"216-664-4235","count":43,"population":30081,"pop_moe":1842,"per_10k":14.3,"per_10k_moe":0.9,"count_class":1,"rate_class":0},"geometry":{"type":"Polygon","coordinates":[[[-81.7344,41.4885],[-81.7376,41.4872],[-81.7375,41.4853],[-81.7355,41.4853],[-81.7349,41.4736],[-81.7302,41.475],[-81.7302,41.4623],[-81.7329,41.4623],[-81.7339,41.4607],[-81.7274,41.4574],[-81.7281,41.4558],[-81.7262,41.4548],[-81.7029,41.4455],[-81.7049,41.4416],[-81.7083,41.4422],[-81.7055,41.4408],[-81.7069,41.439],[-81.7179,41.4391],[-81.7179,41.4364],[-81.7327,41.4365],[-81.7327,41.44],[-81.7353,41.44],[-81.7347,41.4479],[-81.7392,41.4485],[-81.7385,41.4448],[-81.7423,41.4435],[-81.7441,41.4444],[-81.741,41.4456],[-81.7411,41.4467],[-81.7451,41.447],[-81.7451,41.4519],[-81.7373,41.4518],[-81.7386,41.4621],[-81.7489,41.4555],[-81.7534,41.4558],[-81.7533,41.4664],[-81.7542,41.4667],[-81.751,41.4677],[-81.751,41.4705],[-81.7532,41.4705],[-81.753,41.4777],[-81.7521,41.4798],[-81.7502,41.48],[-81.752,41.4826],[-81.7489,41.4839],[-81.7524,41.4845],[-81.7503,41.4896],[-81.7423,41.4893],[-81.7402,41.4902],[-81.7412,41.4907],[-81.7399,41.4922],[-81.7344,41.4942],[-81.7325,41.4897],[-81.7344,41.4885]]]}},{"type":"Feature","properties":{"ward":12,"name":"Ward 12","council_member":"Tanmay Shah","email":"tshah@clevelandcitycouncil.gov","phone":"216-664-4233","count":79,"population":24484,"pop_moe":1834,"per_10k":32.3,"per_10k_moe":2.4,"count_class":3,"rate_class":3},"geometry":{"type":"Polygon","coordinates":[[[-81.7662,41.4929],[-81.7503,41.4896],[-81.7524,41.4845],[-81.7489,41.4839],[-81.752,41.4826],[-81.7502,41.48],[-81.7521,41.4798],[-81.753,41.4777],[-81.7532,41.4705],[-81.751,41.4705],[-81.751,41.4677],[-81.7542,41.4667],[-81.7533,41.4664],[-81.7534,41.4558],[-81.7489,41.4555],[-81.7642,41.4448],[-81.7637,41.4487],[-81.7682,41.4455],[-81.7798,41.4454],[-81.7797,41.4484],[-81.7757,41.4484],[-81.7757,41.4498],[-81.7776,41.4542],[-81.7809,41.4542],[-81.7808,41.4581],[-81.7716,41.461],[-81.7718,41.4627],[-81.7689,41.4627],[-81.7687,41.4924],[-81.7662,41.4929]]]}},{"type":"Feature","properties":{"ward":13,"name":"Ward 13","council_member":"Brian Kazy","email":"bkazy@clevelandcitycouncil.gov","phone":"216-664-2942","count":30,"population":26955,"pop_moe":1583,"per_10k":11.1,"per_10k_moe":0.7,"count_class":0,"rate_class":0},"geometry":{"type":"Polygon","coordinates":[[[-81.7688,41.4704],[-81.7689,41.4627],[-81.7718,41.4627],[-81.7716,41.461],[-81.7808,41.4581],[-81.7809,41.4542],[-81.7776,41.4542],[-81.7757,41.4498],[-81.7757,41.4484],[-81.7797,41.4484],[-81.7798,41.4454],[-81.7682,41.4455],[-81.7695,41.4184],[-81.781,41.4184],[-81.7803,41.4217],[-81.7897,41.4219],[-81.7953,41.4215],[-81.798,41.4199],[-81.8144,41.42],[-81.8162,41.4186],[-81.8225,41.4203],[-81.8243,41.4187],[-81.7901,41.4597],[-81.7897,41.4703],[-81.7796,41.4696],[-81.7688,41.474],[-81.7688,41.4704]]]}},{"type":"Feature","properties":{"ward":14,"name":"Ward 14","council_member":"Jasmin Santana","email":"jsantana@clevelandcitycouncil.gov","phone":"216-664-4238","count":41,"population":23173,"pop_moe":1573,"per_10k":17.7,"per_10k_moe":1.2,"count_class":1,"rate_class":1},"geometry":{"type":"Polygon","coordinates":[[[-81.693,41.4739],[-81.6906,41.4661],[-81.6855,41.4668],[-81.6817,41.4702],[-81.669,41.4699],[-81.6732,41.4652],[-81.6793,41.4641],[-81.6829,41.4606],[-81.6838,41.4553],[-81.6809,41.4493],[-81.6847,41.4474],[-81.6893,41.4486],[-81.7,41.4442],[-81.7262,41.4548],[-81.7281,41.4558],[-81.7274,41.4574],[-81.7339,41.4607],[-81.7329,41.4623],[-81.7302,41.4623],[-81.7301,41.4696],[-81.71,41.474],[-81.693,41.4739]]]}},{"type":"Feature","properties":{"ward":15,"name":"Ward 15","council_member":"Charles J. Slife","email":"cslife@clevelandcitycouncil.gov","phone":"216-664-4239","count":48,"population":25893,"pop_moe":1448,"per_10k":18.5,"per_10k_moe":1.0,"count_class":1,"rate_class":1},"geometry":{"type":"Polygon","coordinates":[[[-81.7897,41.4703],[-81.7901,41.4597],[-81.8243,41.4187],[-81.8317,41.4187],[-81.8304,41.4161],[-81.8312,41.4121],[-81.8441,41.3967],[-81.85,41.3938],[-81.8519,41.3908],[-81.8543,41.3928],[-81.8627,41.392],[-81.8626,41.3942],[-81.8648,41.395],[-81.867,41.395],[-81.8691,41.3925],[-81.8702,41.3933],[-81.8748,41.3913],[-81.8753,41.3921],[-81.8756,41.3907],[-81.8766,41.3915],[-81.8791,41.3955],[-81.8775,41.3996],[-81.8701,41.4042],[-81.8711,41.4058],[-81.8688,41.4083],[-81.8689,41.4049],[-81.8654,41.4071],[-81.8558,41.4187],[-81.8519,41.4187],[-81.852,41.4218],[-81.8544,41.4204],[-81.8536,41.4222],[-81.8558,41.4242],[-81.8536,41.4253],[-81.8534,41.4302],[-81.8502,41.4302],[-81.8475,41.4324],[-81.8453,41.431],[-81.8435,41.4319],[-81.8431,41.4344],[-81.8453,41.438],[-81.8443,41.442],[-81.8409,41.4426],[-81.8323,41.4403],[-81.8297,41.4436],[-81.8316,41.4462],[-81.8319,41.452],[-81.8275,41.4501],[-81.8192,41.4566],[-81.8237,41.4634],[-81.8168,41.4652],[-81.8161,41.4665],[-81.8183,41.4673],[-81.8229,41.4654],[-81.8324,41.4648],[-81.8353,41.4697],[-81.8259,41.4673],[-81.8103,41.468],[-81.8102,41.4702],[-81.7897,41.4703]]]}}]};
+const POINTS = [{"address":"E 105th St & Superior Ave","lat":41.52169,"lon":-81.61549,"n":6,"also":[]},{"address":"2084 W 25th St","lat":41.48309,"lon":-81.70269,"n":4,"also":[]},{"address":"Corlett Ave & E 116th St","lat":41.4556,"lon":-81.60274,"n":4,"also":[]},{"address":"Detroit Ave & W 111th St","lat":41.4824,"lon":-81.76395,"n":4,"also":[]},{"address":"E 119th St & Union Ave","lat":41.46368,"lon":-81.59934,"n":4,"also":[]},{"address":"E 21st St & Prospect Ave E","lat":41.50026,"lon":-81.67544,"n":4,"also":["Prospect Ave E & E 21st St"]},{"address":"E 55th St & Broadway Ave","lat":41.46705,"lon":-81.65128,"n":4,"also":["Broadway Ave & E 55th St"]},{"address":"Fulton Ct & W 38th St","lat":41.48213,"lon":-81.71168,"n":4,"also":["W 38th St & Fulton Ct"]},{"address":"Lakeshore Blvd & E 156th St","lat":41.57864,"lon":-81.57203,"n":4,"also":[]},{"address":"Miles Ave & E 93rd St","lat":41.447,"lon":-81.62136,"n":4,"also":["E 93rd St & Miles Ave"]},{"address":"Nye Rd & St Clair Ave","lat":41.55468,"lon":-81.57374,"n":4,"also":["St Clair Ave & Nye Rd"]},{"address":"Seymour Ave & W 25th St","lat":41.47267,"lon":-81.69945,"n":4,"also":["W 25th St & Seymour Ave"]},{"address":"Soika Ave & E 116th St","lat":41.47363,"lon":-81.60288,"n":4,"also":[]},{"address":"St Clair Ave & Blenheim Rd","lat":41.54823,"lon":-81.58642,"n":4,"also":["Blenheim Rd & St Clair Ave"]},{"address":"11501 Lorain Ave","lat":41.46259,"lon":-81.76668,"n":3,"also":["11500 Lorain Ave"]},{"address":"16800 Lorain Ave","lat":41.45075,"lon":-81.8146,"n":3,"also":["16800 lorain"]},{"address":"3755 W 25th St","lat":41.45902,"lon":-81.70082,"n":3,"also":["3742 W 25th St"]},{"address":"Euclid Ave & E 79th St","lat":41.50376,"lon":-81.63351,"n":3,"also":["E 79th St & Euclid Ave"]},{"address":"Holmes Ave & St Clair Ave","lat":41.55992,"lon":-81.56693,"n":3,"also":["St Clair Ave & London Rd"]},{"address":"Lorain Ave & W 65th St","lat":41.47464,"lon":-81.73015,"n":3,"also":[]},{"address":"Superior Ave & E 79th St","lat":41.51985,"lon":-81.63359,"n":3,"also":["E 79th St & Superior Ave"]},{"address":"W 14th St & Starkweather Ave","lat":41.47739,"lon":-81.69132,"n":3,"also":["Starkweather Ave & W 14th St"]},{"address":"10202 Lorain Ave","lat":41.46649,"lon":-81.75525,"n":2,"also":[]},{"address":"10205 Lorain Ave","lat":41.46619,"lon":-81.75518,"n":2,"also":[]},{"address":"10423 Lorain Ave","lat":41.46521,"lon":-81.75827,"n":2,"also":[]},{"address":"10450 Superior Ave","lat":41.52142,"lon":-81.61585,"n":2,"also":[]},{"address":"10500 Lorain Ave","lat":41.46522,"lon":-81.75909,"n":2,"also":[]},{"address":"10502 Superior Ave","lat":41.52153,"lon":-81.61525,"n":2,"also":[]},{"address":"10611 Lorain Ave","lat":41.46455,"lon":-81.76009,"n":2,"also":[]},{"address":"10717 Detroit Ave","lat":41.48143,"lon":-81.76232,"n":2,"also":[]},{"address":"10808 Superior Ave","lat":41.5218,"lon":-81.61182,"n":2,"also":[]},{"address":"1082 E 105th St","lat":41.52773,"lon":-81.61569,"n":2,"also":[]},{"address":"10933 Superior Ave","lat":41.5224,"lon":-81.61025,"n":2,"also":[]},{"address":"10937 Detroit Ave","lat":41.48194,"lon":-81.76278,"n":2,"also":[]},{"address":"11003 Detroit Ave","lat":41.48203,"lon":-81.76307,"n":2,"also":[]},{"address":"11011 Lorain Ave","lat":41.46353,"lon":-81.76295,"n":2,"also":[]},{"address":"11100 Detroit Ave","lat":41.48255,"lon":-81.764,"n":2,"also":[]},{"address":"11313 Superior Ave","lat":41.52281,"lon":-81.60613,"n":2,"also":[]},{"address":"11401 Union Ave","lat":41.46396,"lon":-81.60377,"n":2,"also":[]},{"address":"11409 Euclid Ave","lat":41.50922,"lon":-81.60541,"n":2,"also":[]},{"address":"11420 Lorain Ave","lat":41.4629,"lon":-81.76636,"n":2,"also":[]},{"address":"11420 Madison Ave","lat":41.47718,"lon":-81.76631,"n":2,"also":[]},{"address":"11472 Euclid Ave","lat":41.51006,"lon":-81.60357,"n":2,"also":[]},{"address":"11511 Kinsman Rd","lat":41.46858,"lon":-81.60348,"n":2,"also":[]},{"address":"11600 Shaker Blvd","lat":41.48372,"lon":-81.60252,"n":2,"also":[]},{"address":"11635 Euclid Ave","lat":41.51129,"lon":-81.60254,"n":2,"also":[]},{"address":"1212 E 105th St","lat":41.52396,"lon":-81.61565,"n":2,"also":[]},{"address":"12426 Superior Ave","lat":41.5229,"lon":-81.59878,"n":2,"also":[]},{"address":"1264 E 123rd St","lat":41.52396,"lon":-81.6014,"n":2,"also":[]},{"address":"12833 LORAIN","lat":41.45924,"lon":-81.77801,"n":2,"also":[]},{"address":"13813 Lorain Ave","lat":41.45548,"lon":-81.78813,"n":2,"also":[]},{"address":"1385 W 117th St","lat":41.52106,"lon":-81.60348,"n":2,"also":[]},{"address":"14000 Puritas Ave","lat":41.43353,"lon":-81.79069,"n":2,"also":[]},{"address":"14025 Puritas Ave","lat":41.43338,"lon":-81.79079,"n":2,"also":[]},{"address":"14827 Lakeshore Blvd","lat":41.5733,"lon":-81.57819,"n":2,"also":[]},{"address":"14910 Lorain Ave","lat":41.45336,"lon":-81.80103,"n":2,"also":[]},{"address":"14911 Lorain Ave","lat":41.45292,"lon":-81.80081,"n":2,"also":[]},{"address":"15210 St Clair Ave","lat":41.55313,"lon":-81.57385,"n":2,"also":[]},{"address":"15637 St Clair Ave","lat":41.55744,"lon":-81.57087,"n":2,"also":[]},{"address":"1575 Merwin Ave","lat":41.4945,"lon":-81.70183,"n":2,"also":[]},{"address":"15803 Lorain Ave","lat":41.45135,"lon":-81.80943,"n":2,"also":[]},{"address":"15805 Lorain Ave","lat":41.45133,"lon":-81.80948,"n":2,"also":[]},{"address":"15901 St Clair Ave","lat":41.55832,"lon":-81.56956,"n":2,"also":[]},{"address":"16300 Lakeshore Blvd","lat":41.57944,"lon":-81.56635,"n":2,"also":[]},{"address":"16416 Euclid Ave","lat":41.54641,"lon":-81.56503,"n":2,"also":[]},{"address":"16600 Lorain Ave","lat":41.45096,"lon":-81.81348,"n":2,"also":[]},{"address":"16700 Lorain Ave","lat":41.45085,"lon":-81.81397,"n":2,"also":[]},{"address":"16705 Euclid Ave","lat":41.54814,"lon":-81.56357,"n":2,"also":[]},{"address":"16803 Lorain Ave","lat":41.45006,"lon":-81.81517,"n":2,"also":[]},{"address":"16804 Lorain Ave","lat":41.45071,"lon":-81.8145,"n":2,"also":[]},{"address":"16940 Lorain Ave","lat":41.45061,"lon":-81.81537,"n":2,"also":[]},{"address":"16960 Lorain Ave","lat":41.45054,"lon":-81.81541,"n":2,"also":[]},{"address":"1700 Denison Ave","lat":41.45158,"lon":-81.69312,"n":2,"also":[]},{"address":"17007 Lorain Ave","lat":41.4502,"lon":-81.81563,"n":2,"also":[]},{"address":"17015 Lorain Ave","lat":41.45019,"lon":-81.81568,"n":2,"also":[]},{"address":"17108 Lorain Ave","lat":41.45046,"lon":-81.81605,"n":2,"also":[]},{"address":"17109 Lorain Ave","lat":41.45005,"lon":-81.81629,"n":2,"also":[]},{"address":"17119 Lorain Ave","lat":41.45007,"lon":-81.81629,"n":2,"also":[]},{"address":"17136 Lorain Ave","lat":41.45041,"lon":-81.81629,"n":2,"also":[]},{"address":"17138 Lorain Ave","lat":41.45039,"lon":-81.81647,"n":2,"also":[]},{"address":"17201 Euclid Ave","lat":41.55015,"lon":-81.56046,"n":2,"also":[]},{"address":"17209 Lorain Ave","lat":41.44998,"lon":-81.8171,"n":2,"also":[]},{"address":"17212 Lorain Ave","lat":41.45056,"lon":-81.81729,"n":2,"also":[]},{"address":"17400 Lorain Ave","lat":41.45054,"lon":-81.81877,"n":2,"also":[]},{"address":"18400 Euclid Ave","lat":41.55724,"lon":-81.54928,"n":2,"also":[]},{"address":"18615 Harvard Ave","lat":41.45028,"lon":-81.54857,"n":2,"also":[]},{"address":"2017 Fulton Rd","lat":41.48107,"lon":-81.7108,"n":2,"also":[]},{"address":"2019 Center St","lat":41.49453,"lon":-81.70493,"n":2,"also":[]},{"address":"2070 W 7th St","lat":41.48414,"lon":-81.68713,"n":2,"also":[]},{"address":"2136 W 98th St","lat":41.47329,"lon":-81.75116,"n":2,"also":[]},{"address":"2232 W 103rd St","lat":41.47065,"lon":-81.75695,"n":2,"also":[]},{"address":"2316 St Clair Ave","lat":41.5101,"lon":-81.67688,"n":2,"also":[]},{"address":"2885 Detroit Ave","lat":41.48968,"lon":-81.71064,"n":2,"also":[]},{"address":"3114 Scranton Rd","lat":41.46973,"lon":-81.69751,"n":2,"also":[]},{"address":"3121 W 25th St","lat":41.46924,"lon":-81.69956,"n":2,"also":[]},{"address":"3203 Lorain Ave","lat":41.48174,"lon":-81.70892,"n":2,"also":[]},{"address":"3315 Broadview Rd","lat":41.44066,"lon":-81.70361,"n":2,"also":[]},{"address":"3376 E 55th St","lat":41.46653,"lon":-81.65191,"n":2,"also":[]},{"address":"3497 E 93rd St","lat":41.46368,"lon":-81.62115,"n":2,"also":[]},{"address":"3700 Lorain Ave","lat":41.48109,"lon":-81.71173,"n":2,"also":[]},{"address":"3805 Terrett Ave","lat":41.48447,"lon":-81.71504,"n":2,"also":[]},{"address":"3840 W 25th St","lat":41.44721,"lon":-81.70284,"n":2,"also":[]},{"address":"3965 W 130th St","lat":41.44618,"lon":-81.77933,"n":2,"also":[]},{"address":"3980 St Clair Ave","lat":41.51592,"lon":-81.66447,"n":2,"also":[]},{"address":"4016 Woodbine Ave","lat":41.48434,"lon":-81.71465,"n":2,"also":[]},{"address":"4020 Bridge Ave","lat":41.48182,"lon":-81.71431,"n":2,"also":[]},{"address":"4125 Fulton Rd","lat":41.44397,"lon":-81.72275,"n":2,"also":[]},{"address":"4255 Pearl Rd","lat":41.43969,"lon":-81.70601,"n":2,"also":[]},{"address":"4273 Fulton Rd","lat":41.4408,"lon":-81.72318,"n":2,"also":[]},{"address":"4288 Fulton Rd","lat":41.44024,"lon":-81.72348,"n":2,"also":[]},{"address":"4303 Pearl Rd","lat":41.43823,"lon":-81.70758,"n":2,"also":[]},{"address":"4315 W 140th St","lat":41.43555,"lon":-81.79065,"n":2,"also":[]},{"address":"4503 State Rd","lat":41.43167,"lon":-81.70697,"n":2,"also":[]},{"address":"4571 Fulton Rd","lat":41.43202,"lon":-81.72345,"n":2,"also":[]},{"address":"4740 Lorain Ave","lat":41.47821,"lon":-81.71978,"n":2,"also":[]},{"address":"4806 State Rd","lat":41.42444,"lon":-81.70994,"n":2,"also":[]},{"address":"4821 W 130th St","lat":41.42327,"lon":-81.77915,"n":2,"also":[]},{"address":"5200 Bridge Ave","lat":41.48079,"lon":-81.7226,"n":2,"also":[]},{"address":"5203 Bridge Ave","lat":41.48045,"lon":-81.72264,"n":2,"also":[]},{"address":"5308 Detroit Ave","lat":41.48607,"lon":-81.72368,"n":2,"also":[]},{"address":"5316 Lorain Ave","lat":41.47706,"lon":-81.72332,"n":2,"also":[]},{"address":"5627 Broadway Ave","lat":41.46699,"lon":-81.651,"n":2,"also":[]},{"address":"6901 Superior Ave","lat":41.51921,"lon":-81.6425,"n":2,"also":[]},{"address":"6955 Euclid Ave","lat":41.50439,"lon":-81.64153,"n":2,"also":[]},{"address":"7210 Memphis Ave","lat":41.44046,"lon":-81.73481,"n":2,"also":[]},{"address":"7515 Euclid Ave","lat":41.50435,"lon":-81.63561,"n":2,"also":[]},{"address":"7600 Euclid Ave","lat":41.50359,"lon":-81.63557,"n":2,"also":[]},{"address":"7700 Harvard Ave","lat":41.44845,"lon":-81.63359,"n":2,"also":[]},{"address":"7909 Superior Ave","lat":41.52019,"lon":-81.63315,"n":2,"also":[]},{"address":"813 E 152nd St","lat":41.55716,"lon":-81.57514,"n":2,"also":[]},{"address":"856 E 152nd St","lat":41.55598,"lon":-81.57583,"n":2,"also":[]},{"address":"8704 Denison Ave","lat":41.46433,"lon":-81.74461,"n":2,"also":[]},{"address":"8711 Denison Ave","lat":41.46408,"lon":-81.74465,"n":2,"also":[]},{"address":"881 E 152nd St","lat":41.55522,"lon":-81.57523,"n":2,"also":[]},{"address":"9216 Superior Ave","lat":41.52073,"lon":-81.62269,"n":2,"also":[]},{"address":"9516 Clifton Blvd","lat":41.48441,"lon":-81.74976,"n":2,"also":[]},{"address":"9807 Lorain Ave","lat":41.46757,"lon":-81.7512,"n":2,"also":[]},{"address":"Adelbert Rd","lat":41.50301,"lon":-81.60464,"n":2,"also":[]},{"address":"Ambleside Dr & Cedar Glen Pkwy","lat":41.49929,"lon":-81.60362,"n":2,"also":[]},{"address":"Bridge Ave & Randall Rd","lat":41.48157,"lon":-81.71433,"n":2,"also":[]},{"address":"Bridge Ave & W 33rd Pl","lat":41.48318,"lon":-81.71082,"n":2,"also":[]},{"address":"Bridge Ave & W 38th St","lat":41.48261,"lon":-81.71209,"n":2,"also":[]},{"address":"Bridge Ave & W 52nd St","lat":41.48064,"lon":-81.72245,"n":2,"also":[]},{"address":"Broadview Rd & Searsdale Ave","lat":41.43797,"lon":-81.69929,"n":2,"also":[]},{"address":"Broadway Ave & Aetna Rd","lat":41.46109,"lon":-81.64212,"n":2,"also":[]},{"address":"Broadway Ave & Barkwill Ave","lat":41.46819,"lon":-81.65249,"n":2,"also":[]},{"address":"Broadway Ave & Blanche Ave","lat":41.46528,"lon":-81.64927,"n":2,"also":[]},{"address":"Broadway Ave & Fleet Ave","lat":41.45699,"lon":-81.6373,"n":2,"also":[]},{"address":"Broadway Ave & Forman Ave","lat":41.45903,"lon":-81.63971,"n":2,"also":[]},{"address":"Carnegie Ave & E 18th St","lat":41.49786,"lon":-81.67815,"n":2,"also":[]},{"address":"Carnegie Ave & E 32nd St","lat":41.50015,"lon":-81.66507,"n":2,"also":[]},{"address":"Cedar Ave & E 55th St","lat":41.50055,"lon":-81.65177,"n":2,"also":[]},{"address":"Cedar Ave & E 73rd St","lat":41.50037,"lon":-81.63814,"n":2,"also":[]},{"address":"Cedar Ave & E 76th St","lat":41.50025,"lon":-81.63569,"n":2,"also":[]},{"address":"Clifton Blvd","lat":41.48548,"lon":-81.75759,"n":2,"also":[]},{"address":"Clifton Blvd & W 104th St","lat":41.48524,"lon":-81.75632,"n":2,"also":[]},{"address":"Clifton Blvd & W 110th St","lat":41.48611,"lon":-81.76102,"n":2,"also":[]},{"address":"Clifton Blvd & W 115th St","lat":41.48702,"lon":-81.76616,"n":2,"also":[]},{"address":"Clifton Blvd & West Blvd","lat":41.48453,"lon":-81.75242,"n":2,"also":[]},{"address":"Cress Rd & Bellaire Rd","lat":41.44926,"lon":-81.76305,"n":2,"also":[]},{"address":"Denison Ave & W 33rd St","lat":41.45061,"lon":-81.70504,"n":2,"also":[]},{"address":"Denison Ave & W 39th St","lat":41.45109,"lon":-81.71121,"n":2,"also":[]},{"address":"Denison Ave & W 98th St","lat":41.46591,"lon":-81.75109,"n":2,"also":[]},{"address":"Detroit Ave & W 110th St","lat":41.4821,"lon":-81.76283,"n":2,"also":[]},{"address":"Detroit Ave & W 112th St","lat":41.48268,"lon":-81.76508,"n":2,"also":[]},{"address":"Detroit Ave & W 114th St","lat":41.48297,"lon":-81.76618,"n":2,"also":[]},{"address":"Detroit Ave & W 116th St","lat":41.48327,"lon":-81.76743,"n":2,"also":[]},{"address":"Detroit Ave & W 117th St","lat":41.48361,"lon":-81.76874,"n":2,"also":[]},{"address":"Detroit Ave & W 80th St","lat":41.48151,"lon":-81.73999,"n":2,"also":[]},{"address":"Detroit Ave & W 95th St","lat":41.48014,"lon":-81.74853,"n":2,"also":[]},{"address":"Drexmore Rd & E 130th St","lat":41.48245,"lon":-81.59177,"n":2,"also":[]},{"address":"E 105th St & Amor Ave","lat":41.5304,"lon":-81.61556,"n":2,"also":[]},{"address":"E 105th St & Columbia Ave","lat":41.53164,"lon":-81.61555,"n":2,"also":[]},{"address":"E 105th St & Empire Ave","lat":41.53247,"lon":-81.61556,"n":2,"also":[]},{"address":"E 105th St & Grantwood Ave","lat":41.52604,"lon":-81.61552,"n":2,"also":[]},{"address":"E 105th St & Martin Luther King Jr Dr","lat":41.51161,"lon":-81.61541,"n":2,"also":[]},{"address":"E 105th St & Massie Ave","lat":41.52873,"lon":-81.61555,"n":2,"also":[]},{"address":"E 105th St & Morison Ave","lat":41.52957,"lon":-81.61555,"n":2,"also":[]},{"address":"E 105th St & South Blvd","lat":41.51336,"lon":-81.61541,"n":2,"also":[]},{"address":"E 110th St & St Clair Ave","lat":41.5405,"lon":-81.60889,"n":2,"also":[]},{"address":"E 114th St & Superior Ave","lat":41.52271,"lon":-81.60597,"n":2,"also":[]},{"address":"E 123rd St & Garrett Sq","lat":41.5377,"lon":-81.59983,"n":2,"also":[]},{"address":"E 130th St & Forest Ave","lat":41.478,"lon":-81.59195,"n":2,"also":[]},{"address":"E 130th St & Union Ave","lat":41.46373,"lon":-81.59188,"n":2,"also":[]},{"address":"E 131st St & Benwood Ave","lat":41.45072,"lon":-81.59113,"n":2,"also":[]},{"address":"E 131st St & Caine Ave","lat":41.44471,"lon":-81.5911,"n":2,"also":[]},{"address":"E 131st St & Corlett Ave","lat":41.45571,"lon":-81.59115,"n":2,"also":[]},{"address":"E 131st St & GAY AVE","lat":41.45689,"lon":-81.59117,"n":2,"also":["E 131st St & Gay Ave"]},{"address":"E 131st St & SOUTHVIEW","lat":41.45433,"lon":-81.59114,"n":2,"also":[]},{"address":"E 152nd St & Aspinwall Ave","lat":41.55795,"lon":-81.5755,"n":2,"also":[]},{"address":"E 152nd St & School Ave","lat":41.55963,"lon":-81.57552,"n":2,"also":[]},{"address":"E 152nd St & Thames Ave","lat":41.5658,"lon":-81.57558,"n":2,"also":[]},{"address":"E 173rd St & Grovewood Ave","lat":41.57583,"lon":-81.55941,"n":2,"also":[]},{"address":"E 174th St & Grovewood Ave","lat":41.57583,"lon":-81.55907,"n":2,"also":[]},{"address":"E 200th St & Cherokee Ave","lat":41.58591,"lon":-81.54015,"n":2,"also":[]},{"address":"E 200th St & Muskoka Ave","lat":41.58732,"lon":-81.54017,"n":2,"also":[]},{"address":"E 22nd St & Central Ave","lat":41.49724,"lon":-81.67376,"n":2,"also":[]},{"address":"E 65th St & Forman Ave","lat":41.45864,"lon":-81.64498,"n":2,"also":[]},{"address":"E 67th St & Forman Ave","lat":41.4587,"lon":-81.64262,"n":2,"also":[]},{"address":"E 68th St & St Clair Ave","lat":41.52662,"lon":-81.64234,"n":2,"also":[]},{"address":"E 69th St & Fleet Ave","lat":41.45623,"lon":-81.64016,"n":2,"also":[]},{"address":"E 69th St & Sebert Ave","lat":41.45712,"lon":-81.64018,"n":2,"also":[]},{"address":"Elm St & Main Ave","lat":41.49599,"lon":-81.70673,"n":2,"also":[]},{"address":"Euclid Ave & Adelbert Rd","lat":41.50592,"lon":-81.60901,"n":2,"also":[]},{"address":"Euclid Ave & Clarkstone Rd","lat":41.54897,"lon":-81.56179,"n":2,"also":[]},{"address":"Euclid Ave & Cliffview Rd","lat":41.55513,"lon":-81.55272,"n":2,"also":[]},{"address":"Euclid Ave & Cornell Rd","lat":41.50818,"lon":-81.60626,"n":2,"also":[]},{"address":"Euclid Ave & E 118th St","lat":41.51193,"lon":-81.60151,"n":2,"also":[]},{"address":"Euclid Ave & E 123rd St","lat":41.51357,"lon":-81.59944,"n":2,"also":[]},{"address":"Euclid Ave & E 65th St","lat":41.50447,"lon":-81.64589,"n":2,"also":[]},{"address":"Euclid Ave & E 69th St","lat":41.5043,"lon":-81.64213,"n":2,"also":[]},{"address":"Euclid Ave & E 81st St","lat":41.5037,"lon":-81.6321,"n":2,"also":[]},{"address":"Euclid Ave & E 82nd St","lat":41.50365,"lon":-81.63092,"n":2,"also":[]},{"address":"Euclid Ave & E 83rd St","lat":41.50371,"lon":-81.62986,"n":2,"also":[]},{"address":"Euclid Ave & E 85th St","lat":41.50362,"lon":-81.62782,"n":2,"also":[]},{"address":"Euclid Ave & E 90th St","lat":41.50346,"lon":-81.62292,"n":2,"also":[]},{"address":"Euclid Ave & E 93rd St","lat":41.50359,"lon":-81.62096,"n":2,"also":[]},{"address":"Euclid Ave & East Blvd","lat":41.50522,"lon":-81.60983,"n":2,"also":[]},{"address":"Euclid Ave & Green Rd","lat":41.557,"lon":-81.55012,"n":2,"also":[]},{"address":"Euclid Ave & Hillview Rd","lat":41.55385,"lon":-81.5545,"n":2,"also":[]},{"address":"Euclid Ave & London Rd","lat":41.55179,"lon":-81.55762,"n":2,"also":[]},{"address":"Euclid Ave & Octavia Rd","lat":41.54715,"lon":-81.56438,"n":2,"also":[]},{"address":"Euclid Ave & Stearns Rd","lat":41.50379,"lon":-81.61177,"n":2,"also":[]},{"address":"Euclid Ave & Willowhurst Rd","lat":41.55052,"lon":-81.55949,"n":2,"also":[]},{"address":"Franklin Blvd & W 65th St","lat":41.4819,"lon":-81.73026,"n":2,"also":[]},{"address":"Franklin Blvd & W 74th St","lat":41.48046,"lon":-81.73577,"n":2,"also":[]},{"address":"Fulton Rd & Denison Ave","lat":41.4529,"lon":-81.71608,"n":2,"also":[]},{"address":"Fulton Rd & Walton Ave","lat":41.471,"lon":-81.70756,"n":2,"also":[]},{"address":"Fulton Rd & Woodbine Ave","lat":41.48411,"lon":-81.71,"n":2,"also":[]},{"address":"Griffing Ave & S Moreland Blvd","lat":41.47522,"lon":-81.59058,"n":2,"also":[]},{"address":"Grovewood Ave & E 156th St","lat":41.57568,"lon":-81.57199,"n":2,"also":[]},{"address":"Harvard Ave & E 144th St","lat":41.44917,"lon":-81.58077,"n":2,"also":[]},{"address":"Harvard Ave & E 147th St","lat":41.44935,"lon":-81.57861,"n":2,"also":[]},{"address":"Harvard Ave & E 153rd St","lat":41.44973,"lon":-81.57425,"n":2,"also":[]},{"address":"Harvard Ave & E 173rd St","lat":41.44983,"lon":-81.55895,"n":2,"also":[]},{"address":"Harvard Ave & E 176th St","lat":41.44984,"lon":-81.55635,"n":2,"also":[]},{"address":"Harvard Ave & E 74th St","lat":41.44869,"lon":-81.63692,"n":2,"also":[]},{"address":"Harvard Ave & E 93rd St","lat":41.44883,"lon":-81.62136,"n":2,"also":[]},{"address":"Jefferson Ave & Professor St","lat":41.4795,"lon":-81.68456,"n":2,"also":[]},{"address":"Kinsman Rd & E 93rd St","lat":41.47196,"lon":-81.6215,"n":2,"also":[]},{"address":"Lake Ave & W 83rd St","lat":41.48365,"lon":-81.74152,"n":2,"also":[]},{"address":"Lakeshore Blvd & E 149th St","lat":41.57311,"lon":-81.57796,"n":2,"also":[]},{"address":"Lakeshore Blvd & E 152nd St","lat":41.57373,"lon":-81.57525,"n":2,"also":[]},{"address":"Lakeshore Blvd & Euclid Beach Blvd","lat":41.57933,"lon":-81.56954,"n":2,"also":[]},{"address":"Lakeshore Blvd & Huntmere Ave","lat":41.57423,"lon":-81.57527,"n":2,"also":[]},{"address":"Lakeview Rd & Garrett Sq","lat":41.52352,"lon":-81.60124,"n":2,"also":[]},{"address":"Lee Rd & Harvard Ave","lat":41.4498,"lon":-81.56485,"n":2,"also":[]},{"address":"Lee Rd & Langly Ave","lat":41.43654,"lon":-81.56477,"n":2,"also":[]},{"address":"Lee Rd & Miles Ave","lat":41.44013,"lon":-81.56479,"n":2,"also":[]},{"address":"Lee Rd & S Miles Rd","lat":41.43719,"lon":-81.55396,"n":2,"also":[]},{"address":"Lee Rd & Seville Rd","lat":41.43505,"lon":-81.56477,"n":2,"also":[]},{"address":"Lee Rd & Tarkington Ave","lat":41.43148,"lon":-81.5648,"n":2,"also":[]},{"address":"Leeila Ave & Bellaire Rd","lat":41.44115,"lon":-81.77465,"n":2,"also":[]},{"address":"Lorain Ave & Rocky River Dr","lat":41.45015,"lon":-81.81679,"n":2,"also":[]},{"address":"Lorain Ave & W 105th St","lat":41.46522,"lon":-81.75869,"n":2,"also":[]},{"address":"Lorain Ave & W 110th St","lat":41.4639,"lon":-81.7627,"n":2,"also":[]},{"address":"Lorain Ave & W 126th St","lat":41.45981,"lon":-81.77537,"n":2,"also":[]},{"address":"Lorain Ave & W 127th St","lat":41.45949,"lon":-81.77634,"n":2,"also":[]},{"address":"Lorain Ave & W 137th St","lat":41.45601,"lon":-81.78718,"n":2,"also":[]},{"address":"Lorain Ave & W 143rd St","lat":41.45442,"lon":-81.79365,"n":2,"also":[]},{"address":"Lorain Ave & W 58th St","lat":41.47618,"lon":-81.72546,"n":2,"also":[]},{"address":"Lorain Ave & W 61st St","lat":41.47548,"lon":-81.72759,"n":2,"also":[]},{"address":"Lorain Ave & W 69th St","lat":41.47341,"lon":-81.73385,"n":2,"also":[]},{"address":"Lorain Ave & W 95th St","lat":41.46856,"lon":-81.74858,"n":2,"also":[]},{"address":"Lorain Ave & W 98th St","lat":41.46773,"lon":-81.75104,"n":2,"also":[]},{"address":"Madison Ave & W 116th St","lat":41.47702,"lon":-81.76746,"n":2,"also":[]},{"address":"Madison Ave & W 81st St","lat":41.47717,"lon":-81.74074,"n":2,"also":[]},{"address":"Miles Ave & E 119th St","lat":41.44525,"lon":-81.60026,"n":2,"also":[]},{"address":"Miles Ave & E 135th St","lat":41.44542,"lon":-81.58871,"n":2,"also":[]},{"address":"Pearl Rd & Archmere Ave","lat":41.4258,"lon":-81.71985,"n":2,"also":[]},{"address":"Pearl Rd & Devonshire Rd","lat":41.43988,"lon":-81.70621,"n":2,"also":[]},{"address":"Pearl Rd & Leopold Ave","lat":41.43436,"lon":-81.71077,"n":2,"also":[]},{"address":"Pearl Rd & State Rd","lat":41.43902,"lon":-81.70692,"n":2,"also":[]},{"address":"Prospect Ave E & Bolivar Rd","lat":41.49959,"lon":-81.68145,"n":2,"also":["Bolivar Rd & Prospect Ave E"]},{"address":"Prospect Ave E & E 18th St","lat":41.49992,"lon":-81.67852,"n":2,"also":[]},{"address":"Prospect Ave E & E 30th St","lat":41.50118,"lon":-81.66714,"n":2,"also":[]},{"address":"Prospect Ave E & E 36th St","lat":41.50171,"lon":-81.66251,"n":2,"also":[]},{"address":"Prospect Ave E & E 40th St","lat":41.50222,"lon":-81.65768,"n":2,"also":[]},{"address":"Puritas Ave & W 140th St","lat":41.43351,"lon":-81.79019,"n":2,"also":[]},{"address":"S Moreland Blvd & Drexmore Rd","lat":41.48239,"lon":-81.59041,"n":2,"also":[]},{"address":"Shaker Blvd & E 116th St","lat":41.48424,"lon":-81.60291,"n":2,"also":[]},{"address":"St Clair Ave & E 105th St","lat":41.53877,"lon":-81.61555,"n":2,"also":[]},{"address":"St Clair Ave & E 106th St","lat":41.53988,"lon":-81.61312,"n":2,"also":[]},{"address":"St Clair Ave & E 144th St","lat":41.55158,"lon":-81.58164,"n":2,"also":[]},{"address":"St Clair Ave & E 149th St","lat":41.55267,"lon":-81.57794,"n":2,"also":[]},{"address":"St Clair Ave & E 150th St","lat":41.55297,"lon":-81.57675,"n":2,"also":[]},{"address":"Starkweather Ave & W 11th St","lat":41.47741,"lon":-81.68928,"n":2,"also":[]},{"address":"Stokes blvd & Euclid ave","lat":41.50377,"lon":-81.61297,"n":2,"also":[]},{"address":"Superior Ave & E 40th St","lat":41.51385,"lon":-81.66216,"n":2,"also":[]},{"address":"Superior Ave & E 49th St","lat":41.5162,"lon":-81.6563,"n":2,"also":[]},{"address":"Superior Ave & E 71st St","lat":41.5192,"lon":-81.63962,"n":2,"also":[]},{"address":"Superior Ave & E 82nd St","lat":41.52016,"lon":-81.63065,"n":2,"also":[]},{"address":"Superior Ave & Parkwood Dr","lat":41.52234,"lon":-81.60936,"n":2,"also":[]},{"address":"Superior Ave E & E 21st St","lat":41.50732,"lon":-81.67864,"n":2,"also":[]},{"address":"Union Ave & E 93rd St","lat":41.46352,"lon":-81.62145,"n":2,"also":[]},{"address":"W 106th St & Lorain Ave","lat":41.46489,"lon":-81.75972,"n":2,"also":["Lorain Ave & W 106th St"]},{"address":"W 11th St & Fairfield Ave","lat":41.48227,"lon":-81.68934,"n":2,"also":[]},{"address":"W 25th St & Archwood Ave","lat":41.45269,"lon":-81.70149,"n":2,"also":[]},{"address":"W 25th St & Franklin Blvd","lat":41.48807,"lon":-81.70633,"n":2,"also":[]},{"address":"W 25th St & Monroe Ave","lat":41.48138,"lon":-81.70112,"n":2,"also":[]},{"address":"W 28th St & Detroit Ave","lat":41.49054,"lon":-81.70935,"n":2,"also":[]},{"address":"W 57th St & Detroit Ave","lat":41.48527,"lon":-81.72566,"n":2,"also":[]},{"address":"W 65th St & Bridge Ave","lat":41.48061,"lon":-81.73026,"n":2,"also":[]},{"address":"W 65th St & Fir Ave","lat":41.47978,"lon":-81.73025,"n":2,"also":[]},{"address":"W 65th St & W Clinton Ave","lat":41.48298,"lon":-81.73027,"n":2,"also":[]},{"address":"W 7th St & Jefferson Ave","lat":41.48039,"lon":-81.68302,"n":2,"also":[]},{"address":"W 7th St & Starkweather Ave","lat":41.47779,"lon":-81.68039,"n":2,"also":[]},{"address":"Wade Park Ave & E 70th St","lat":41.51574,"lon":-81.64125,"n":2,"also":[]},{"address":"1 Sherwin Way","lat":41.49916,"lon":-81.69696,"n":1,"also":[]},{"address":"10505 St Clair Ave","lat":41.53922,"lon":-81.61455,"n":1,"also":[]},{"address":"10612 Lorain Ave","lat":41.46524,"lon":-81.76035,"n":1,"also":[]},{"address":"10705 Lorain Ave","lat":41.46447,"lon":-81.76039,"n":1,"also":[]},{"address":"11433 Ashbury Ave","lat":41.51726,"lon":-81.60497,"n":1,"also":[]},{"address":"1148 Prospect Ave E","lat":41.49925,"lon":-81.68261,"n":1,"also":[]},{"address":"11624 Lorain Ave","lat":41.46227,"lon":-81.76832,"n":1,"also":[]},{"address":"11642 Lorain Ave","lat":41.4622,"lon":-81.76857,"n":1,"also":[]},{"address":"1167 East Blvd","lat":41.52472,"lon":-81.62288,"n":1,"also":[]},{"address":"12105 Lorain Ave","lat":41.46064,"lon":-81.77236,"n":1,"also":[]},{"address":"1300 Superior Ave E","lat":41.50409,"lon":-81.68423,"n":1,"also":[]},{"address":"13046 Lorain Ave","lat":41.45844,"lon":-81.78023,"n":1,"also":[]},{"address":"1305 Euclid Ave","lat":41.50102,"lon":-81.68229,"n":1,"also":[]},{"address":"1307 Auburn Ave","lat":41.47593,"lon":-81.69079,"n":1,"also":[]},{"address":"13206 Lorain Ave","lat":41.45797,"lon":-81.7817,"n":1,"also":[]},{"address":"13220 Lorain Ave","lat":41.45791,"lon":-81.78182,"n":1,"also":[]},{"address":"1341 W 106th St","lat":41.48312,"lon":-81.75948,"n":1,"also":[]},{"address":"13712 Lorain Ave","lat":41.45629,"lon":-81.7876,"n":1,"also":[]},{"address":"1380 E 6th St","lat":41.50221,"lon":-81.69197,"n":1,"also":[]},{"address":"1387 W 83rd St","lat":41.4816,"lon":-81.74134,"n":1,"also":[]},{"address":"13916 Lakeshore Blvd","lat":41.5684,"lon":-81.58603,"n":1,"also":[]},{"address":"13925 Puritas Ave","lat":41.43334,"lon":-81.78942,"n":1,"also":[]},{"address":"1468 W 9th St","lat":41.49745,"lon":-81.69943,"n":1,"also":[]},{"address":"15116 Lakeshore Blvd","lat":41.57306,"lon":-81.57554,"n":1,"also":[]},{"address":"15225 Waterloo Rd","lat":41.56975,"lon":-81.57431,"n":1,"also":[]},{"address":"15303 Waterloo Rd","lat":41.56976,"lon":-81.57412,"n":1,"also":[]},{"address":"15335 Waterloo Rd","lat":41.57033,"lon":-81.57338,"n":1,"also":[]},{"address":"15425 Waterloo Rd","lat":41.57042,"lon":-81.57294,"n":1,"also":[]},{"address":"15517 Waterloo Rd","lat":41.5707,"lon":-81.57244,"n":1,"also":[]},{"address":"15602 Waterloo Rd.","lat":41.5708,"lon":-81.57171,"n":1,"also":[]},{"address":"15613 Waterloo Rd","lat":41.57102,"lon":-81.57191,"n":1,"also":[]},{"address":"15702 Waterloo Rd","lat":41.57094,"lon":-81.57083,"n":1,"also":[]},{"address":"15710 Waterloo Rd","lat":41.57098,"lon":-81.57046,"n":1,"also":[]},{"address":"15711 Waterloo Rd","lat":41.57139,"lon":-81.57046,"n":1,"also":[]},{"address":"15736 Lorain Ave","lat":41.45173,"lon":-81.80911,"n":1,"also":[]},{"address":"15813 Lorain Ave","lat":41.45129,"lon":-81.80967,"n":1,"also":[]},{"address":"15813 Waterloo Rd","lat":41.5713,"lon":-81.56951,"n":1,"also":[]},{"address":"15931 Lorain Ave","lat":41.45112,"lon":-81.81015,"n":1,"also":[]},{"address":"16006 Waterloo Rd","lat":41.57093,"lon":-81.569,"n":1,"also":[]},{"address":"18001 Euclid Ave","lat":41.55472,"lon":-81.55365,"n":1,"also":[]},{"address":"1937 Prospect Ave E","lat":41.50023,"lon":-81.67713,"n":1,"also":[]},{"address":"2003 St Clair Ave","lat":41.50895,"lon":-81.68051,"n":1,"also":[]},{"address":"201 Superior Ave","lat":41.50056,"lon":-81.69262,"n":1,"also":[]},{"address":"2025 Ontario St","lat":41.49872,"lon":-81.69256,"n":1,"also":[]},{"address":"2108 W 73rd St","lat":41.4742,"lon":-81.73498,"n":1,"also":[]},{"address":"2270 Professor St","lat":41.48082,"lon":-81.68644,"n":1,"also":[]},{"address":"2357 Tremont St","lat":41.48029,"lon":-81.68703,"n":1,"also":[]},{"address":"2379 Tremont St","lat":41.47974,"lon":-81.68659,"n":1,"also":[]},{"address":"2475 E 22nd St","lat":41.49513,"lon":-81.67405,"n":1,"also":[]},{"address":"2500 E 22nd St","lat":41.49438,"lon":-81.67647,"n":1,"also":[]},{"address":"2507 E 22nd St","lat":41.49418,"lon":-81.6742,"n":1,"also":[]},{"address":"2541 E 80th St","lat":41.48931,"lon":-81.63233,"n":1,"also":[]},{"address":"2819 Community College Ave","lat":41.49474,"lon":-81.6682,"n":1,"also":[]},{"address":"2921 Community College Ave","lat":41.49465,"lon":-81.6675,"n":1,"also":[]},{"address":"308 Euclid Ave","lat":41.49945,"lon":-81.69092,"n":1,"also":[]},{"address":"3135 Lorain Ave","lat":41.48193,"lon":-81.7087,"n":1,"also":[]},{"address":"3145 Scranton Rd","lat":41.46864,"lon":-81.69702,"n":1,"also":[]},{"address":"3175 W 84th St","lat":41.46744,"lon":-81.74232,"n":1,"also":[]},{"address":"3207 Monroe Ave","lat":41.47816,"lon":-81.70781,"n":1,"also":[]},{"address":"3264 Scranton Rd","lat":41.46547,"lon":-81.69835,"n":1,"also":[]},{"address":"3301 Scranton Rd","lat":41.46426,"lon":-81.69828,"n":1,"also":[]},{"address":"3340 W 25th St","lat":41.46323,"lon":-81.70082,"n":1,"also":[]},{"address":"3481 Fulton Rd","lat":41.45952,"lon":-81.71165,"n":1,"also":[]},{"address":"3500 Lorain Ave","lat":41.4814,"lon":-81.71092,"n":1,"also":[]},{"address":"3545 Fulton Rd","lat":41.45792,"lon":-81.71273,"n":1,"also":[]},{"address":"3706 Pearl Rd","lat":41.45422,"lon":-81.7017,"n":1,"also":[]},{"address":"4221 Fulton Rd","lat":41.44168,"lon":-81.72291,"n":1,"also":[]},{"address":"4256 Pearl Rd","lat":41.43984,"lon":-81.70654,"n":1,"also":[]},{"address":"4310 E 71st St","lat":41.44154,"lon":-81.63979,"n":1,"also":[]},{"address":"4576 W 130th St","lat":41.4297,"lon":-81.78035,"n":1,"also":[]},{"address":"4603 Pearl Rd","lat":41.4304,"lon":-81.71419,"n":1,"also":[]},{"address":"4638 Fulton Rd","lat":41.43019,"lon":-81.72405,"n":1,"also":[]},{"address":"4638 W 130th St","lat":41.42787,"lon":-81.78026,"n":1,"also":[]},{"address":"4669 W 130th St","lat":41.42716,"lon":-81.77993,"n":1,"also":[]},{"address":"4950 Broadway Ave","lat":41.47191,"lon":-81.65692,"n":1,"also":[]},{"address":"5001 Fleet Ave","lat":41.456,"lon":-81.65536,"n":1,"also":[]},{"address":"552 E 152nd St","lat":41.56615,"lon":-81.57591,"n":1,"also":[]},{"address":"600 Superior Ave","lat":41.49795,"lon":-81.697,"n":1,"also":[]},{"address":"615 W Superior Ave","lat":41.49761,"lon":-81.69722,"n":1,"also":[]},{"address":"618 Prospect Ave E","lat":41.4984,"lon":-81.68835,"n":1,"also":[]},{"address":"6300 Broadway Ave","lat":41.46321,"lon":-81.64642,"n":1,"also":[]},{"address":"631 E 152nd St","lat":41.56095,"lon":-81.57552,"n":1,"also":[]},{"address":"6405 Kenyon Ave","lat":41.4614,"lon":-81.64565,"n":1,"also":[]},{"address":"6430 Broadway Ave","lat":41.46213,"lon":-81.64528,"n":1,"also":[]},{"address":"6500 Hough Ave","lat":41.50839,"lon":-81.64561,"n":1,"also":[]},{"address":"6501 Lorain Ave","lat":41.47448,"lon":-81.73033,"n":1,"also":[]},{"address":"6516 Hough Ave","lat":41.50834,"lon":-81.64522,"n":1,"also":[]},{"address":"6600 Lexington Ave","lat":41.51065,"lon":-81.64402,"n":1,"also":[]},{"address":"7109 Kinsman Rd","lat":41.48004,"lon":-81.63854,"n":1,"also":[]},{"address":"7405 Detroit Ave","lat":41.48242,"lon":-81.73554,"n":1,"also":[]},{"address":"784 E 152nd St","lat":41.55819,"lon":-81.57564,"n":1,"also":[]},{"address":"810 Huron Rd E","lat":41.49838,"lon":-81.68644,"n":1,"also":[]},{"address":"815 Rockwell Ave","lat":41.50294,"lon":-81.6896,"n":1,"also":[]},{"address":"901 Lakeside Ave E","lat":41.50552,"lon":-81.69152,"n":1,"also":[]},{"address":"91 Public Sq","lat":41.50035,"lon":-81.69468,"n":1,"also":[]},{"address":"Broadway Ave","lat":41.45345,"lon":-81.63315,"n":1,"also":[]},{"address":"Broadway Ave & McBride Ave","lat":41.46983,"lon":-81.65421,"n":1,"also":[]},{"address":"Clark Ave & W 38th St","lat":41.46975,"lon":-81.71066,"n":1,"also":[]},{"address":"College Ave & Professor St","lat":41.48049,"lon":-81.68559,"n":1,"also":[]},{"address":"Columbus Rd & Robert Lockwood Jr Dr","lat":41.4954,"lon":-81.69912,"n":1,"also":[]},{"address":"Crawford Rd & Wade Park Ave","lat":41.51583,"lon":-81.62124,"n":1,"also":[]},{"address":"E 14th St & Carnegie Ave","lat":41.49763,"lon":-81.67894,"n":1,"also":[]},{"address":"E 30th St & St Clair Ave","lat":41.51256,"lon":-81.67247,"n":1,"also":[]},{"address":"E 3rd St","lat":41.4203,"lon":-81.7026,"n":1,"also":[]},{"address":"E 55th St & Harlem Ave","lat":41.51517,"lon":-81.65189,"n":1,"also":[]},{"address":"E 55th St & Lexington Ave","lat":41.51097,"lon":-81.65184,"n":1,"also":[]},{"address":"E 55th St & St Clair Ave","lat":41.52229,"lon":-81.65193,"n":1,"also":[]},{"address":"E 60th St & Superior Ave","lat":41.51824,"lon":-81.64888,"n":1,"also":[]},{"address":"E 61st St & St Clair Ave","lat":41.52355,"lon":-81.64912,"n":1,"also":[]},{"address":"E 79th St & Wade Park Ave","lat":41.51578,"lon":-81.63362,"n":1,"also":[]},{"address":"E 81st St & Aetna Rd","lat":41.45918,"lon":-81.63098,"n":1,"also":[]},{"address":"E 85th St & Superior Ave","lat":41.5204,"lon":-81.62844,"n":1,"also":[]},{"address":"E 89th St & Superior Ave","lat":41.52068,"lon":-81.62587,"n":1,"also":[]},{"address":"E 93rd St & Kenmore Ave","lat":41.51379,"lon":-81.62184,"n":1,"also":[]},{"address":"E 93rd St & Wade Park Ave","lat":41.51583,"lon":-81.62237,"n":1,"also":[]},{"address":"E 9th St & Prospect Ave E","lat":41.49901,"lon":-81.68563,"n":1,"also":[]},{"address":"Elm St & Winslow Ave","lat":41.49572,"lon":-81.7057,"n":1,"also":[]},{"address":"Fairwood Dr & W 137th St","lat":41.4546,"lon":-81.78664,"n":1,"also":[]},{"address":"Fulton Rd & Hyde Ave","lat":41.46616,"lon":-81.70797,"n":1,"also":[]},{"address":"Fulton Rd & Newark Ave","lat":41.46656,"lon":-81.70769,"n":1,"also":[]},{"address":"Fulton Rd & Penn Ct","lat":41.46239,"lon":-81.71029,"n":1,"also":[]},{"address":"Fulton Rd & St Roccos Ct","lat":41.46746,"lon":-81.70747,"n":1,"also":[]},{"address":"Harvard Ave & E 131st St","lat":41.44901,"lon":-81.59113,"n":1,"also":[]},{"address":"Harvard Ave & E 136th St","lat":41.44906,"lon":-81.58751,"n":1,"also":[]},{"address":"Harvard Ave & E 142nd St","lat":41.44909,"lon":-81.58291,"n":1,"also":[]},{"address":"Harvard Ave & E 186th St","lat":41.44987,"lon":-81.54893,"n":1,"also":[]},{"address":"Harvard Ave & E 79th St","lat":41.44881,"lon":-81.63041,"n":1,"also":[]},{"address":"Harvard Ave & E 86th St","lat":41.44882,"lon":-81.62676,"n":1,"also":[]},{"address":"Hough Ave & E 82nd St","lat":41.50932,"lon":-81.63072,"n":1,"also":[]},{"address":"Hough Ave & E 93rd St","lat":41.51032,"lon":-81.62189,"n":1,"also":[]},{"address":"Huron Rd E & E 6th St","lat":41.49773,"lon":-81.68806,"n":1,"also":[]},{"address":"Huron Rd E & E 7th St","lat":41.4981,"lon":-81.68733,"n":1,"also":[]},{"address":"Kenilworth Ave & W 11th St","lat":41.47967,"lon":-81.68931,"n":1,"also":[]},{"address":"Kingsbury Blvd & Kinsman Rd","lat":41.47099,"lon":-81.61694,"n":1,"also":[]},{"address":"Lakeshore Blvd & E 140th St","lat":41.56913,"lon":-81.58525,"n":1,"also":[]},{"address":"Lakeshore Blvd & Nottingham Rd","lat":41.58072,"lon":-81.56078,"n":1,"also":[]},{"address":"Larchmere Blvd & E 116th St","lat":41.48572,"lon":-81.60297,"n":1,"also":[]},{"address":"Literary Rd & Professor St","lat":41.48165,"lon":-81.68675,"n":1,"also":[]},{"address":"Lorain Ave & W 111th St","lat":41.46355,"lon":-81.7638,"n":1,"also":[]},{"address":"Lorain Ave & W 130th St","lat":41.45894,"lon":-81.77944,"n":1,"also":[]},{"address":"Mapledale Ave & W 25th St","lat":41.45445,"lon":-81.70128,"n":1,"also":[]},{"address":"Ontario St & Euclid Ave","lat":41.50033,"lon":-81.69426,"n":1,"also":[]},{"address":"Ontario St & Huron Rd E","lat":41.49658,"lon":-81.6903,"n":1,"also":[]},{"address":"Prospect Ave E & E 14th St","lat":41.49967,"lon":-81.68081,"n":1,"also":[]},{"address":"Prospect Ave E & E 2nd St","lat":41.49819,"lon":-81.69065,"n":1,"also":[]},{"address":"Prospect Ave E & E 8th St","lat":41.49877,"lon":-81.68708,"n":1,"also":[]},{"address":"Prospect Ave E & Ontario St","lat":41.4979,"lon":-81.69211,"n":1,"also":[]},{"address":"Scranton Rd & Buhrer Ave","lat":41.46773,"lon":-81.69752,"n":1,"also":[]},{"address":"St Clair Ave & E 179th St","lat":41.56981,"lon":-81.55366,"n":1,"also":[]},{"address":"St Clair Ave & E 187th St","lat":41.57355,"lon":-81.54859,"n":1,"also":[]},{"address":"St Clair Ave & Whitcomb Rd","lat":41.55828,"lon":-81.56915,"n":1,"also":[]},{"address":"Starkweather Ave & Professor St","lat":41.4775,"lon":-81.68253,"n":1,"also":[]},{"address":"Superior Ave & E 52nd St","lat":41.51711,"lon":-81.65395,"n":1,"also":[]},{"address":"Superior Ave & E 55th St","lat":41.5179,"lon":-81.6519,"n":1,"also":[]},{"address":"Superior Ave & W Huron Rd","lat":41.49711,"lon":-81.69864,"n":1,"also":[]},{"address":"Superior Ave E & E 12th St","lat":41.5035,"lon":-81.68616,"n":1,"also":[]},{"address":"Superior Ave E & E 13th St","lat":41.50418,"lon":-81.68483,"n":1,"also":[]},{"address":"Superior Ave E & E 17th St","lat":41.50578,"lon":-81.68168,"n":1,"also":[]},{"address":"Superior Ave E & E 18th St","lat":41.5063,"lon":-81.68066,"n":1,"also":[]},{"address":"Superior Ave E & E 3rd St","lat":41.50056,"lon":-81.69192,"n":1,"also":[]},{"address":"Superior Ave E & E 6th St","lat":41.50138,"lon":-81.69032,"n":1,"also":[]},{"address":"Tremont St & College Ave","lat":41.47969,"lon":-81.68698,"n":1,"also":[]},{"address":"W 10th St & Professor St","lat":41.48227,"lon":-81.68765,"n":1,"also":[]},{"address":"W 122nd St & Lorain Ave","lat":41.46063,"lon":-81.77277,"n":1,"also":[]},{"address":"W 138th St","lat":41.48289,"lon":-81.68279,"n":1,"also":[]},{"address":"W 25th St & Clark Ave","lat":41.46993,"lon":-81.69973,"n":1,"also":[]},{"address":"W 25th St & Woodbridge Ave","lat":41.4609,"lon":-81.70066,"n":1,"also":[]},{"address":"W 41st St & Lorain Ave","lat":41.47982,"lon":-81.71349,"n":1,"also":[]},{"address":"W 7th St & W 10th St","lat":41.48424,"lon":-81.68772,"n":1,"also":[]},{"address":"W Superior Ave & Robert Lockwood Jr Dr","lat":41.49778,"lon":-81.69732,"n":1,"also":[]},{"address":"W Superior Ave & W Prospect Ave","lat":41.49797,"lon":-81.69704,"n":1,"also":[]},{"address":"Wade Park Ave & E 71st St","lat":41.51575,"lon":-81.63964,"n":1,"also":[]},{"address":"Warner Rd & Force Ave","lat":41.44148,"lon":-81.62639,"n":1,"also":[]},{"address":"Waterloo Rd & E 156th St","lat":41.57086,"lon":-81.57192,"n":1,"also":[]},{"address":"Waterloo Rd & E 157th St","lat":41.57113,"lon":-81.57096,"n":1,"also":[]},{"address":"Waterloo Rd & E 160th St","lat":41.57113,"lon":-81.56937,"n":1,"also":[]},{"address":"Waterloo Rd & E 161st St","lat":41.57113,"lon":-81.56836,"n":1,"also":[]},{"address":"Whitman Ave & W 33rd Pl","lat":41.48399,"lon":-81.71147,"n":1,"also":[]},{"address":"Woodland Ave & E 30th St","lat":41.4914,"lon":-81.66824,"n":1,"also":[]},{"address":"Woodland Ave & E 34th St","lat":41.49079,"lon":-81.66531,"n":1,"also":[]}];
+const META = {"total":834,"mapped":830,"unassigned":4,"count_breaks":[38,49,65,106],"rate_breaks":[14.3,22.2,28.6,39.8],"city_pop":366340,"colors":["#dbe7e3","#a9d2cf","#5fa896","#23685b"],"heading":"Where Cleveland\u2019s public trash cans are","noun":"public street trash cans","caveat":"Locations are geocoded from the street addresses and intersections on the city\u2019s list and may be off by a few dozen feet."};
+const INK = "#404F54";
+const fmt = n => n.toLocaleString("en-US");
+const color = p => META.colors[p.count_class];
+
+// Ward fills sit on top of aerial imagery rather than a pale street map. At
+// city zoom they carry the choropleth, so they run fairly solid; zoomed into a
+// neighborhood the imagery is the point, so they thin out and let it through.
+const FILL_OPACITY = ["interpolate", ["linear"], ["zoom"],
+                      11, 0.72, 13.5, 0.55, 15, 0.3, 16.5, 0.18];
+
+// The whole city. Matches the ward file's own bounding box.
+const CITY_BOUNDS = [[-81.87910, 41.39074], [-81.53291, 41.59951]];
+
+// ---- the map ---------------------------------------------------------------
+// Esri World Imagery as a raster source: real tiles through z19 here, where
+// USGS imagery caps at z16. The attribution string is Esri's condition of use.
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      sat: {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: 'Imagery: Esri, Maxar, Earthstar Geographics'
+      }
+    },
+    layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
+  },
+  bounds: CITY_BOUNDS,
+  fitBoundsOptions: { padding: 48 },
+  maxZoom: 19
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+
+// MapLibre watches the window, not its own container. Inside an embed the
+// container changes width on its own -- webfonts landing, the parent page
+// reflowing, a phone rotating -- and without this the canvas keeps the old
+// size and the map ends up drawn into part of the box.
+if (window.ResizeObserver) {
+  new ResizeObserver(() => map.resize()).observe(document.querySelector(".map-wrap"));
+}
+
+// The choropleth shades raw counts. The per-10,000-residents figure lives in
+// the side table, where it can sit beside the count instead of replacing it.
+const COUNT_LABEL = "Cans";
+
+const FILL_COLOR = [
+  "match", ["get", "count_class"],
+  0, META.colors[0],
+  1, META.colors[1],
+  2, META.colors[2],
+  3, META.colors[3],
+  META.colors[0]
+];
+
+function tooltip(p) {
+  return '<div class="tt-title">' + p.name + "</div>" +
+         '<div class="tt-sub">' + fmt(p.count) + " trash cans &middot; " +
+           p.per_10k + " per 10k residents (&plusmn;" + p.per_10k_moe + ")</div>" +
+         (p.council_member
+           ? '<div class="tt-row" style="opacity:.55">' + p.council_member + "</div>"
+           : "");
+}
+
+// One row of the receptacle list is one can, and busy corners hold several, so
+// cans sharing a coordinate are drawn as a single badged marker rather than
+// stacked invisibly on top of each other.
+function canTooltip(p) {
+  const others = JSON.parse(p.also || "[]");
+  return '<div class="tt-title">' + p.address + "</div>" +
+         '<div class="tt-sub">' + (p.n === 1 ? "1 public trash can"
+                                             : fmt(p.n) + " public trash cans here") + "</div>" +
+         others.map(a => '<div class="tt-row" style="opacity:.6">' + a + "</div>").join("");
+}
+
+// MapLibre hands back feature properties with every array and object
+// JSON-stringified, so read the real record out of DATA instead of off the
+// event.
+const propsOf = ward => (DATA.features.find(f => f.properties.ward === ward) || {}).properties;
+
+// ---- cursor-following tooltip ----------------------------------------------
+const tip = document.getElementById("tip");
+const wrap = document.querySelector(".map-wrap");
+
+function showTip(html, pt) {
+  tip.innerHTML = html;
+  tip.classList.add("visible");
+  const w = wrap.getBoundingClientRect();
+  const t = tip.getBoundingClientRect();
+  let x = pt.x + 14, y = pt.y - t.height / 2;
+  if (x + t.width > w.width - 6) x = pt.x - t.width - 14;
+  tip.style.left = Math.max(6, x) + "px";
+  tip.style.top = Math.min(Math.max(6, y), w.height - t.height - 6) + "px";
+}
+function hideTip() { tip.classList.remove("visible"); }
+
+// ---- ward layers -----------------------------------------------------------
+let hovered = null;
+let selected = null;
+
+map.on("load", () => {
+  map.addSource("wards", { type: "geojson", data: DATA, promoteId: "ward" });
+
+  map.addLayer({
+    id: "ward-fill", type: "fill", source: "wards",
+    paint: { "fill-color": FILL_COLOR, "fill-opacity": FILL_OPACITY,
+             "fill-opacity-transition": { duration: 400 } }
+  });
+
+  map.addLayer({
+    id: "ward-line", type: "line", source: "wards",
+    paint: {
+      "line-color": ["case",
+        ["boolean", ["feature-state", "hover"], false], INK,
+        ["boolean", ["feature-state", "selected"], false], "#F4C913",
+        "#ffffff"],
+      "line-width": ["case",
+        ["boolean", ["feature-state", "hover"], false], 2.5,
+        ["boolean", ["feature-state", "selected"], false], 2.5,
+        1.4]
+    }
+  });
+
+  addCans();
+
+  map.on("mousemove", "ward-fill", e => {
+    // A can sitting under the cursor owns the tooltip.
+    if (map.getLayer("cans") && map.queryRenderedFeatures(e.point, { layers: ["cans"] }).length) return;
+    const f = e.features[0];
+    map.getCanvas().style.cursor = "pointer";
+    // In the detail view the cans carry the tooltips; a ward summary hovering
+    // over unshaded imagery would just be in the way.
+    if (selected !== null) { hideTip(); return; }
+    const props = propsOf(f.properties.ward);
+    if (hovered !== null && hovered !== f.id) {
+      map.setFeatureState({ source: "wards", id: hovered }, { hover: false });
+    }
+    hovered = f.id;
+    map.setFeatureState({ source: "wards", id: hovered }, { hover: true });
+    showTip(tooltip(props), e.point);
+  });
+
+  map.on("mouseleave", "ward-fill", () => {
+    map.getCanvas().style.cursor = "";
+    if (hovered !== null) map.setFeatureState({ source: "wards", id: hovered }, { hover: false });
+    hovered = null;
+    hideTip();
+  });
+
+  map.on("click", "ward-fill", e => {
+    // The can layer sits on top and handles its own clicks.
+    if (map.getLayer("cans") && map.queryRenderedFeatures(e.point, { layers: ["cans"] }).length) return;
+    select(e.features[0].properties.ward);
+  });
+
+  renderTable();
+  legendUpdate();
+});
+
+// ---- trash can markers -----------------------------------------------------
+// A symbol layer, not 800-odd DOM markers: it stays smooth while panning the
+// imagery. The icon is the 🗑️ emoji painted into a canvas, so the map needs no
+// glyph server -- this style sheet has no `glyphs` entry and needs none.
+const EMOJI_FONT = '44px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
+// Linux and some headless builds have no emoji font and paint a blank box, so
+// check once whether 🗑️ actually lands any pixels and fall back to drawing the
+// can if it does not.
+const EMOJI_OK = (() => {
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = EMOJI_FONT;
+    g.fillText("🗑️", 32, 32);
+    const d = g.getImageData(16, 16, 32, 32).data;
+    let ink = 0, colored = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] <= 24) continue;
+      ink++;
+      // A real emoji is in color; a missing-glyph box is flat black.
+      if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 18) colored++;
+    }
+    return ink > 80 && colored > ink * 0.15;
+  } catch (e) { return false; }
+})();
+
+function drawVectorCan(g, cx, cy, scale) {
+  // Fallback glyph, drawn dark because it sits on the white disc.
+  const w = 22 * scale, h = 25 * scale, top = cy - h / 2 - 2 * scale;
+  g.lineJoin = "round";
+  g.fillStyle = "#404F54";
+  g.strokeStyle = "#404F54";
+  g.lineWidth = 3 * scale;
+  g.beginPath();                                   // handle
+  g.rect(cx - 5 * scale, top - 6 * scale, 10 * scale, 3.5 * scale);
+  g.fill();
+  g.beginPath();                                   // lid
+  g.rect(cx - w / 2 - 2.5 * scale, top - 2.5 * scale, w + 5 * scale, 5 * scale);
+  g.fill();
+  g.beginPath();                                   // tapered body
+  g.moveTo(cx - w / 2, top + 4 * scale);
+  g.lineTo(cx + w / 2, top + 4 * scale);
+  g.lineTo(cx + w / 2 - 3.5 * scale, top + 4 * scale + h);
+  g.lineTo(cx - w / 2 + 3.5 * scale, top + 4 * scale + h);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = "#ffffff";                       // ribs, knocked out
+  g.lineWidth = 2 * scale;
+  [-6, 0, 6].forEach(dx => {
+    g.beginPath();
+    g.moveTo(cx + dx * scale, top + 9 * scale);
+    g.lineTo(cx + dx * 0.72 * scale, top + h);
+    g.stroke();
+  });
+}
+
+function canIconImage(n) {
+  const S = 64, dpr = 2.6;              // 64px art shown at ~24px
+  const CX = 32, CY = 34, R = 21;       // the disc; the badge rides above it
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+
+  // White disc behind the can. Aerial imagery is busy and mostly mid-tone, so
+  // a plain emoji gets lost in it; the disc gives every marker the same
+  // background whatever it happens to be sitting on.
+  g.shadowColor = "rgba(0,0,0,0.5)";
+  g.shadowBlur = 5;
+  g.shadowOffsetY = 1.5;
+  g.beginPath();
+  g.arc(CX, CY, R, 0, Math.PI * 2);
+  g.fillStyle = "#ffffff";
+  g.fill();
+  g.shadowColor = "transparent";
+  g.lineWidth = 1.6;
+  g.strokeStyle = "rgba(64,79,84,0.45)";
+  g.stroke();
+
+  if (EMOJI_OK) {
+    g.font = '29px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    g.fillStyle = "#404F54";
+    g.fillText("\u{1F5D1}\uFE0F", CX, CY + 1);
+  } else {
+    drawVectorCan(g, CX, CY, 1);
+  }
+
+  if (n > 1) {                          // count badge, CPD accent yellow
+    g.beginPath();
+    g.arc(S - 13, 12, 11.5, 0, Math.PI * 2);
+    g.fillStyle = "#F4C913";
+    g.fill();
+    g.lineWidth = 2.2;
+    g.strokeStyle = "#404F54";
+    g.stroke();
+    g.fillStyle = "#404F54";
+    g.font = '700 15px "Roboto Condensed","Arial Narrow",sans-serif';
+    g.fillText(String(n), S - 13, 13);
+  }
+  return { data: g.getImageData(0, 0, S, S), pixelRatio: dpr };
+}
+
+function addCans() {
+  const counts = [...new Set(POINTS.map(p => p.n))];
+  counts.forEach(n => {
+    const img = canIconImage(n);
+    if (!map.hasImage("can-" + n)) map.addImage("can-" + n, img.data, { pixelRatio: img.pixelRatio });
+  });
+
+  map.addSource("cans", {
+    type: "geojson",
+    data: {
+      type: "FeatureCollection",
+      features: POINTS.map(p => ({
+        type: "Feature",
+        properties: { address: p.address, n: p.n, also: JSON.stringify(p.also || []) },
+        geometry: { type: "Point", coordinates: [p.lon, p.lat] }
+      }))
+    }
+  });
+
+  map.addLayer({
+    id: "cans", type: "symbol", source: "cans",
+    layout: {
+      // Off until a ward is picked: citywide, 480-odd markers bury the
+      // choropleth they are meant to illustrate.
+      visibility: "none",
+      "icon-image": ["concat", "can-", ["to-string", ["get", "n"]]],
+      // The markers only ever show in the detail view, so the ramp is tuned to
+      // that range: readable the moment a ward fills the frame, full size once
+      // you are down at street level.
+      "icon-size": ["interpolate", ["linear"], ["zoom"],
+                    11.5, 0.72, 13, 0.9, 15, 1.1, 17, 1.25],
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true
+    }
+  });
+
+  map.on("mousemove", "cans", e => {
+    map.getCanvas().style.cursor = "pointer";
+    showTip(canTooltip(e.features[0].properties), e.point);
+  });
+  map.on("mouseleave", "cans", () => { map.getCanvas().style.cursor = ""; hideTip(); });
+
+  // Pressing a can goes down to it -- close enough to see the sidewalk it is
+  // on, far enough out to keep the block around it in frame.
+  map.on("click", "cans", e => {
+    const f = e.features[0];
+    map.easeTo({ center: f.geometry.coordinates,
+                 zoom: Math.max(map.getZoom(), 16.4),
+                 duration: 900 });
+    showTip(canTooltip(f.properties), e.point);
+  });
+}
+
+// ---- bounding box of a ward ------------------------------------------------
+// MapLibre has no getBounds() on a feature, so walk the rings.
+function featureBounds(f) {
+  const b = new maplibregl.LngLatBounds();
+  f.geometry.coordinates.forEach(ring => ring.forEach(c => b.extend(c)));
+  return b;
+}
+
+// ---- legend ----------------------------------------------------------------
+const legendEl = document.getElementById("legend");
+
+function choroplethLegend() {
+  let lo = 0, rows = "";
+  META.count_breaks.forEach((b, i) => {
+    const hi = Math.round(b);
+    rows += '<div class="legend-chip"><span class="dot" style="background:' +
+            META.colors[i] + '"></span>' +
+            (i === 0 ? "Up to " + hi : (lo + 1) + "&ndash;" + hi) + "</div>";
+    lo = hi;
+  });
+  return '<div class="legend-title">' + COUNT_LABEL + "</div>" + rows;
+}
+
+// In the detail view there is no shading left to explain, so the legend
+// switches to what the markers mean.
+function canLegend() {
+  const many = POINTS.some(p => p.n > 1);
+  return '<div class="legend-title">Trash cans</div>' +
+         '<div class="legend-chip"><span class="legend-can">\u{1F5D1}\uFE0F</span>One can</div>' +
+         (many ? '<div class="legend-chip"><span class="legend-badge">3</span>Several at one spot</div>' : "");
+}
+
+function legendUpdate() {
+  legendEl.innerHTML = selected === null ? choroplethLegend() : canLegend();
+}
+
+// ---- side table ------------------------------------------------------------
+const tbody = document.querySelector("#tbl tbody");
+
+function renderTable() {
+  const rows = DATA.features.map(f => f.properties).sort((a, b) => b.count - a.count);
+  tbody.innerHTML = rows.map(p =>
+    '<tr data-ward="' + p.ward + '">' +
+      '<td><span class="swatch" style="background:' + color(p) + '"></span>' + p.name + "</td>" +
+      "<td>" + fmt(p.count) + "</td>" +
+      "<td>" + fmt(p.population) + "</td>" +
+      "<td>" + p.per_10k + "</td>" +
+    "</tr>").join("");
+  [...tbody.rows].forEach(tr => tr.onclick = () => select(+tr.dataset.ward));
+  if (selected !== null) markRow(selected);
+}
+
+function markRow(ward) {
+  [...tbody.rows].forEach(tr => tr.classList.toggle("selected", +tr.dataset.ward === ward));
+}
+
+const resetBtn = document.getElementById("reset");
+
+// Two views of the same map. Citywide: ward shading, no markers. Ward picked:
+// zoomed in, shading gone, every can on the bare imagery.
+function showDetail(on) {
+  if (map.getLayer("ward-fill"))
+    map.setPaintProperty("ward-fill", "fill-opacity", on ? 0 : FILL_OPACITY);
+  if (map.getLayer("cans"))
+    map.setLayoutProperty("cans", "visibility", on ? "visible" : "none");
+  legendUpdate();
+}
+
+function select(ward) {
+  if (selected !== null) map.setFeatureState({ source: "wards", id: selected }, { selected: false });
+  selected = ward;
+  map.setFeatureState({ source: "wards", id: ward }, { selected: true });
+  markRow(ward);
+  const f = DATA.features.find(f => f.properties.ward === ward);
+  if (f) map.fitBounds(featureBounds(f), { padding: 40 });
+  hideTip();
+  showDetail(true);
+  resetBtn.classList.add("show");
+  const tr = tbody.querySelector('tr[data-ward="' + ward + '"]');
+  if (tr) tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+resetBtn.onclick = () => {
+  if (selected !== null) map.setFeatureState({ source: "wards", id: selected }, { selected: false });
+  selected = null;
+  markRow(-1);
+  hideTip();
+  showDetail(false);
+  map.fitBounds(CITY_BOUNDS, { padding: 48 });
+  resetBtn.classList.remove("show");
+};
+
+// ---- chrome ----------------------------------------------------------------
+document.title = META.heading;
+document.getElementById("heading").textContent = META.heading;
+
+document.getElementById("subheading").textContent =
+  fmt(META.mapped) + " " + META.noun + " mapped across the city’s 15 wards.";
+
+document.getElementById("source").innerHTML =
+  "Source: City of Cleveland public trash can locations and 2026 ward boundaries (Ord. No. 1-2025), " +
+  "City of Cleveland Open Data. Population is U.S. Census Bureau American Community Survey " +
+  "2020–2024 five-year estimates, aggregated by ward (citywide " + fmt(META.city_pop) + "). " +
+  "Imagery: Esri, Maxar, Earthstar Geographics.";
+
+// ---- embed auto-height -----------------------------------------------------
+// Replaces pym.js (pym.nprapps.com is dead). Parent listener: wordpress-embed.html
+(function () {
+  var lastHeight = 0;
+  function postHeight() {
+    var h = Math.ceil(document.querySelector(".viz-container").getBoundingClientRect().height) + 64;
+    if (h === lastHeight) return;
+    lastHeight = h;
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "embed-height", height: h }, "*");
+    }
+  }
+  window.addEventListener("load", postHeight);
+  window.addEventListener("resize", postHeight);
+  setInterval(postHeight, 500);
+  postHeight();
+})();
+</script>
+</body>
+</html>

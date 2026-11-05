@@ -1,0 +1,98 @@
+{
+ "_README": [
+  "Hand corrections applied by build_maps.py to the Geocodio export in",
+  "data/public receptacles.csv. Keyed on the exact 'Address' string in that",
+  "file, so a correction covers every row carrying that address.",
+  "",
+  "A null 'lat' drops the row: the address cannot be placed at all.",
+  "",
+  "These were found by comparing each row's input address against the address",
+  "Geocodio actually matched. Where a street number or name vanished in the",
+  "match, the row was re-geocoded against OpenStreetMap (the node or crossing",
+  "two named streets share, via the Overpass API). Rows whose coordinates look",
+  "soft but not wrong -- a street-center fallback that still lands on the right",
+  "street in the right ward -- were left alone rather than guessed at.",
+  "",
+  "Checked against OSM on 2026-11-04."
+ ],
+
+ "Detroit Ave & W 95th St": {
+  "lat": 41.480138, "lon": -81.748529,
+  "how": "OSM: Detroit Avenue x West 95th Street",
+  "was": "41.495067,-81.701612 -- Geocodio dropped the street number and matched 'Detroit Ave and W St', stacking five different corners on one point"
+ },
+ "Detroit Ave & W 114th St": {
+  "lat": 41.482972, "lon": -81.766184,
+  "how": "OSM: Detroit Avenue x West 114th Street",
+  "was": "41.495067,-81.701612 -- same 'Detroit Ave and W St' collapse"
+ },
+ "Detroit Ave & W 116th St": {
+  "lat": 41.483272, "lon": -81.767427,
+  "how": "OSM: Detroit Avenue x West 116th Street",
+  "was": "41.495067,-81.701612 -- same 'Detroit Ave and W St' collapse"
+ },
+ "Detroit Ave & W 117th St": {
+  "lat": 41.483614, "lon": -81.768739,
+  "how": "OSM: Detroit Avenue x West 117th Street",
+  "was": "41.495067,-81.701612 -- same 'Detroit Ave and W St' collapse"
+ },
+ "W 28th St & Detroit Ave,  Cleveland,  44113": {
+  "lat": 41.490536, "lon": -81.709354,
+  "how": "OSM: Detroit Avenue x West 28th Street",
+  "was": "41.495067,-81.701612 -- same 'Detroit Ave and W St' collapse"
+ },
+
+ "Euclid Ave & E 90th St": {
+  "lat": 41.503462, "lon": -81.622918,
+  "how": "OSM: Euclid Avenue x East 90th Street",
+  "was": "41.502206,-81.669735 -- Geocodio matched 'Euclid Ave and I-90', about 3.9 km west"
+ },
+ "Miles Ave & E 135th St": {
+  "lat": 41.445423, "lon": -81.588709,
+  "how": "OSM: Miles Avenue x East 135th Street",
+  "was": "41.398939,-81.588671 -- Geocodio matched 'E 135th St and Milo Rd', about 5 km south and outside the city"
+ },
+
+ "W 25th St & Archwood Ave": {
+  "lat": 41.452695, "lon": -81.701486,
+  "how": "OSM: Pearl Road x Archwood Avenue -- W 25th St is named Pearl Rd on this stretch",
+  "was": "41.459017,-81.700819 -- street center of W 25th St"
+ },
+ "Mapledale Ave & W 25th St": {
+  "lat": 41.454448, "lon": -81.701281,
+  "how": "OSM: Mapledale Avenue x Pearl Road -- W 25th St is named Pearl Rd on this stretch",
+  "was": "41.454382,-81.707851 -- street center of Mapledale Ave"
+ },
+ "Harvard Ave & E 186th St": {
+  "lat": 41.449871, "lon": -81.54893,
+  "how": "OSM: Harvard Avenue East x East 186th Street",
+  "was": "41.448026,-81.642918 -- street center of Harvard Ave, about 8 km west"
+ },
+
+ "Corlett Ave & E.116TH": {
+  "lat": 41.455605, "lon": -81.602743,
+  "how": "OSM: west end of Corlett Avenue, where East 116th Street meets it",
+  "was": "41.455646,-81.597839 -- street center of Corlett Ave; 'E.116TH' went unparsed"
+ },
+ "Corlett Ave  & E.116TH": {
+  "lat": 41.455605, "lon": -81.602743,
+  "how": "OSM: west end of Corlett Avenue, where East 116th Street meets it",
+  "was": "41.455646,-81.597839 -- the same corner, typed with a double space"
+ },
+ "Larchmere Blvd & E.116TH": {
+  "lat": 41.48572, "lon": -81.602972,
+  "how": "OSM: west end of Larchmere Boulevard at East 116th Street",
+  "was": "41.487243,-81.590379 -- street center of Larchmere Blvd, which fell outside every ward"
+ },
+
+ "1 Sherwin Way": {
+  "lat": 41.499164, "lon": -81.696958,
+  "how": "OSM: Sherwin-Williams headquarters, Public Square",
+  "was": "41.489381,-81.667486 -- Geocodio matched nothing and returned a city placeholder about 2.9 km southeast"
+ },
+ "16800": {
+  "lat": null, "lon": null,
+  "how": "dropped: a house number with no street, which cannot be placed",
+  "was": "41.489381,-81.667486 -- the same city placeholder"
+ }
+}

@@ -1,0 +1,16 @@
+# This repo carries the public trash can map only. The other two maps in this
+# working folder are built by the same script from their own CSVs and are kept
+# out of it on purpose.
+/debris-in-street/
+/new-container-requests/
+/data/debris in street.csv
+/data/new container requests.csv
+/assets/template.html
+
+# The receptacle export as delivered. data/public receptacles.csv is the same
+# file under the name the build script reads, and that copy is tracked.
+/As of *.csv
+
+.DS_Store
+__pycache__/
+*.pyc

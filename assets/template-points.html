@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cleveland public trash cans by ward</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --accent:#F4C913;
+    --ink:#404F54;
+    --teal:#23685b;
+    --teal-mid:#5fa896;
+    --teal-light:#a9d2cf;
+    --teal-pale:#dbe7e3;
+    --gray:#879599;
+    --gray-line:#ccd8db;
+    --rc:'Roboto Condensed','Arial Narrow',sans-serif;
+    --inter:'Inter',Arial,sans-serif;
+    --gotham:'Gotham','Gotham Medium',sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  /* Body: transparent, flex-centered. No min-height:100vh -- it makes embed
+     heights ratchet upward. */
+  body {
+    margin: 0;
+    padding: 32px 16px;
+    background: transparent;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    color: var(--ink);
+    font-family: var(--inter);
+  }
+
+  .viz-container {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    background: #fff;
+  }
+  .viz-container::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--accent);
+  }
+
+  /* ---- header ---- */
+  .viz-header { padding: 20px 20px 16px; }
+  .viz-kicker {
+    font-family: var(--gotham);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: .65;
+    margin-bottom: 6px;
+  }
+  .viz-heading {
+    font-family: var(--rc);
+    font-weight: 700;
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 0 0 6px;
+  }
+  .viz-subheading {
+    font-family: var(--inter);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.5;
+    opacity: .72;
+    margin: 0;
+  }
+
+  /* ---- standfirst line under the heading ---- */
+  .viz-controls {
+    padding: 0 20px 14px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toggle-hint {
+    font-family: var(--inter);
+    font-size: 12px;
+    opacity: .55;
+  }
+
+  /* ---- body ---- */
+  .viz-body { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .map-wrap {
+    position: relative;
+    flex: 1 1 520px;
+    min-width: 300px;
+    height: 560px;
+  }
+  #map { position: absolute; inset: 0; background: #223; }
+  .viz-side {
+    flex: 0 1 320px;
+    min-width: 280px;
+    height: 560px;
+    overflow-y: auto;
+    padding: 0 20px 16px;
+  }
+  .viz-side h2 {
+    font-family: var(--rc);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: .55;
+    margin: 0 0 8px;
+    padding-top: 2px;
+  }
+
+  table { border-collapse: collapse; width: 100%; font-family: var(--inter); font-size: 12px; }
+  th, td { text-align: right; padding: 6px 4px; border-bottom: 1px solid rgba(64,79,84,0.12); }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: .55;
+    position: sticky;
+    top: 0;
+    background: #fff;
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: rgba(35,104,91,0.06); }
+  tbody tr.selected { background: rgba(244,201,19,0.18); }
+
+  /* ---- legend ---- */
+  /* Sits top-right inside the map; MapLibre's attribution owns bottom-right. */
+  .legend {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    background: #fff;
+    padding: 10px 12px;
+    border-radius: 2px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+  }
+  .legend-title {
+    font-family: var(--rc);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: .55;
+    margin-bottom: 6px;
+  }
+  .legend-chip {
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    line-height: 1.7;
+    color: var(--ink);
+  }
+  .legend-chip .dot,
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    border: 1px solid rgba(64,79,84,0.28);
+    flex: none;
+    display: inline-block;
+  }
+  .swatch { margin-right: 7px; vertical-align: middle; }
+
+  /* detail-view legend: what a marker means */
+  .legend-can {
+    width: 17px; height: 17px; flex: none;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid rgba(64,79,84,0.45);
+    font-size: 10px;
+    line-height: 15px;
+    text-align: center;
+  }
+  .legend-badge {
+    width: 15px; height: 15px; flex: none;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 1.5px solid var(--ink);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 12px;
+    text-align: center;
+  }
+
+  /* ---- reset button ---- */
+  .map-reset {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    font-family: var(--rc);
+    font-weight: 500;
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    border-radius: 2px;
+    background: #fff;
+    border: 1px solid var(--gray-line);
+    color: var(--ink);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.28);
+    display: none;
+  }
+  .map-reset.show { display: block; }
+  .map-reset:hover { border-color: var(--teal); }
+
+  /* ---- tooltip ---- */
+  /* Canonical .bar-tooltip spec. MapLibre has no sticky-tooltip primitive, so
+     this is a plain div we move with the cursor (see showTip/hideTip). */
+  .bar-tooltip {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .12s;
+    background: var(--ink);
+    color: #fff;
+    font-family: var(--inter);
+    font-size: 0.75rem;
+    padding: 12px 16px;
+    border-radius: 2px;
+    max-width: 280px;
+    min-width: 180px;
+    border: 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    white-space: normal;
+  }
+  .bar-tooltip.visible { opacity: 1; }
+  .bar-tooltip .tt-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .bar-tooltip .tt-total,
+  .bar-tooltip .tt-sub {
+    font-size: 0.68rem;
+    opacity: .55;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.25);
+  }
+  .bar-tooltip .tt-row { display: flex; align-items: center; gap: 7px; line-height: 1.7; }
+  .bar-tooltip .tt-row .dot {
+    width: 9px; height: 9px; border-radius: 2px; flex: none;
+    border: 1px solid rgba(255,255,255,0.28);
+  }
+  .bar-tooltip .tt-count,
+  .bar-tooltip .tt-val { font-weight: 600; margin-left: auto; }
+
+  /* ---- notes ---- */
+  .viz-source {
+    font-family: var(--inter);
+    font-size: 11px;
+    opacity: .5;
+    padding: 16px 20px 20px;
+    line-height: 1.5;
+  }
+  .viz-source a { color: inherit; }
+
+  /* MapLibre's attribution over imagery: keep it legible but quiet. */
+  .maplibregl-ctrl-attrib {
+    font-family: var(--inter);
+    font-size: 10px;
+  }
+  .maplibregl-canvas:focus { outline: none; }
+</style>
+</head>
+<body>
+
+<div class="viz-container">
+
+  <div class="viz-header">
+    <div class="viz-kicker">Signal Cleveland</div>
+    <h1 class="viz-heading" id="heading"></h1>
+    <p class="viz-subheading" id="subheading"></p>
+  </div>
+
+  <div class="viz-controls">
+    <span class="toggle-hint">Darker shading means more cans. Select a ward to zoom in and see every can on it, then press a can to go down to it.</span>
+  </div>
+
+  <div class="viz-body">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <button class="map-reset" id="reset">Whole city</button>
+      <div class="legend" id="legend"></div>
+      <div class="bar-tooltip" id="tip"></div>
+    </div>
+    <div class="viz-side">
+      <h2>Ranked wards</h2>
+      <table id="tbl">
+        <thead><tr><th>Ward</th><th>Cans</th><th>Population</th><th>Per 10k</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="viz-source" id="source"></div>
+
+</div>
+
+<script>
+const DATA = __GEOJSON__;
+const POINTS = __POINTS__;
+const META = __META__;
+const INK = "#404F54";
+const fmt = n => n.toLocaleString("en-US");
+const color = p => META.colors[p.count_class];
+
+// Ward fills sit on top of aerial imagery rather than a pale street map. At
+// city zoom they carry the choropleth, so they run fairly solid; zoomed into a
+// neighborhood the imagery is the point, so they thin out and let it through.
+const FILL_OPACITY = ["interpolate", ["linear"], ["zoom"],
+                      11, 0.72, 13.5, 0.55, 15, 0.3, 16.5, 0.18];
+
+// The whole city. Matches the ward file's own bounding box.
+const CITY_BOUNDS = [[-81.87910, 41.39074], [-81.53291, 41.59951]];
+
+// ---- the map ---------------------------------------------------------------
+// Esri World Imagery as a raster source: real tiles through z19 here, where
+// USGS imagery caps at z16. The attribution string is Esri's condition of use.
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      sat: {
+        type: 'raster',
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: 'Imagery: Esri, Maxar, Earthstar Geographics'
+      }
+    },
+    layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
+  },
+  bounds: CITY_BOUNDS,
+  fitBoundsOptions: { padding: 48 },
+  maxZoom: 19
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+
+// MapLibre watches the window, not its own container. Inside an embed the
+// container changes width on its own -- webfonts landing, the parent page
+// reflowing, a phone rotating -- and without this the canvas keeps the old
+// size and the map ends up drawn into part of the box.
+if (window.ResizeObserver) {
+  new ResizeObserver(() => map.resize()).observe(document.querySelector(".map-wrap"));
+}
+
+// The choropleth shades raw counts. The per-10,000-residents figure lives in
+// the side table, where it can sit beside the count instead of replacing it.
+const COUNT_LABEL = "Cans";
+
+const FILL_COLOR = [
+  "match", ["get", "count_class"],
+  0, META.colors[0],
+  1, META.colors[1],
+  2, META.colors[2],
+  3, META.colors[3],
+  META.colors[0]
+];
+
+function tooltip(p) {
+  return '<div class="tt-title">' + p.name + "</div>" +
+         '<div class="tt-sub">' + fmt(p.count) + " trash cans &middot; " +
+           p.per_10k + " per 10k residents (&plusmn;" + p.per_10k_moe + ")</div>" +
+         (p.council_member
+           ? '<div class="tt-row" style="opacity:.55">' + p.council_member + "</div>"
+           : "");
+}
+
+// One row of the receptacle list is one can, and busy corners hold several, so
+// cans sharing a coordinate are drawn as a single badged marker rather than
+// stacked invisibly on top of each other.
+function canTooltip(p) {
+  const others = JSON.parse(p.also || "[]");
+  return '<div class="tt-title">' + p.address + "</div>" +
+         '<div class="tt-sub">' + (p.n === 1 ? "1 public trash can"
+                                             : fmt(p.n) + " public trash cans here") + "</div>" +
+         others.map(a => '<div class="tt-row" style="opacity:.6">' + a + "</div>").join("");
+}
+
+// MapLibre hands back feature properties with every array and object
+// JSON-stringified, so read the real record out of DATA instead of off the
+// event.
+const propsOf = ward => (DATA.features.find(f => f.properties.ward === ward) || {}).properties;
+
+// ---- cursor-following tooltip ----------------------------------------------
+const tip = document.getElementById("tip");
+const wrap = document.querySelector(".map-wrap");
+
+function showTip(html, pt) {
+  tip.innerHTML = html;
+  tip.classList.add("visible");
+  const w = wrap.getBoundingClientRect();
+  const t = tip.getBoundingClientRect();
+  let x = pt.x + 14, y = pt.y - t.height / 2;
+  if (x + t.width > w.width - 6) x = pt.x - t.width - 14;
+  tip.style.left = Math.max(6, x) + "px";
+  tip.style.top = Math.min(Math.max(6, y), w.height - t.height - 6) + "px";
+}
+function hideTip() { tip.classList.remove("visible"); }
+
+// ---- ward layers -----------------------------------------------------------
+let hovered = null;
+let selected = null;
+
+map.on("load", () => {
+  map.addSource("wards", { type: "geojson", data: DATA, promoteId: "ward" });
+
+  map.addLayer({
+    id: "ward-fill", type: "fill", source: "wards",
+    paint: { "fill-color": FILL_COLOR, "fill-opacity": FILL_OPACITY,
+             "fill-opacity-transition": { duration: 400 } }
+  });
+
+  map.addLayer({
+    id: "ward-line", type: "line", source: "wards",
+    paint: {
+      "line-color": ["case",
+        ["boolean", ["feature-state", "hover"], false], INK,
+        ["boolean", ["feature-state", "selected"], false], "#F4C913",
+        "#ffffff"],
+      "line-width": ["case",
+        ["boolean", ["feature-state", "hover"], false], 2.5,
+        ["boolean", ["feature-state", "selected"], false], 2.5,
+        1.4]
+    }
+  });
+
+  addCans();
+
+  map.on("mousemove", "ward-fill", e => {
+    // A can sitting under the cursor owns the tooltip.
+    if (map.getLayer("cans") && map.queryRenderedFeatures(e.point, { layers: ["cans"] }).length) return;
+    const f = e.features[0];
+    map.getCanvas().style.cursor = "pointer";
+    // In the detail view the cans carry the tooltips; a ward summary hovering
+    // over unshaded imagery would just be in the way.
+    if (selected !== null) { hideTip(); return; }
+    const props = propsOf(f.properties.ward);
+    if (hovered !== null && hovered !== f.id) {
+      map.setFeatureState({ source: "wards", id: hovered }, { hover: false });
+    }
+    hovered = f.id;
+    map.setFeatureState({ source: "wards", id: hovered }, { hover: true });
+    showTip(tooltip(props), e.point);
+  });
+
+  map.on("mouseleave", "ward-fill", () => {
+    map.getCanvas().style.cursor = "";
+    if (hovered !== null) map.setFeatureState({ source: "wards", id: hovered }, { hover: false });
+    hovered = null;
+    hideTip();
+  });
+
+  map.on("click", "ward-fill", e => {
+    // The can layer sits on top and handles its own clicks.
+    if (map.getLayer("cans") && map.queryRenderedFeatures(e.point, { layers: ["cans"] }).length) return;
+    select(e.features[0].properties.ward);
+  });
+
+  renderTable();
+  legendUpdate();
+});
+
+// ---- trash can markers -----------------------------------------------------
+// A symbol layer, not 800-odd DOM markers: it stays smooth while panning the
+// imagery. The icon is the 🗑️ emoji painted into a canvas, so the map needs no
+// glyph server -- this style sheet has no `glyphs` entry and needs none.
+const EMOJI_FONT = '44px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
+// Linux and some headless builds have no emoji font and paint a blank box, so
+// check once whether 🗑️ actually lands any pixels and fall back to drawing the
+// can if it does not.
+const EMOJI_OK = (() => {
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = EMOJI_FONT;
+    g.fillText("🗑️", 32, 32);
+    const d = g.getImageData(16, 16, 32, 32).data;
+    let ink = 0, colored = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] <= 24) continue;
+      ink++;
+      // A real emoji is in color; a missing-glyph box is flat black.
+      if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 18) colored++;
+    }
+    return ink > 80 && colored > ink * 0.15;
+  } catch (e) { return false; }
+})();
+
+function drawVectorCan(g, cx, cy, scale) {
+  // Fallback glyph, drawn dark because it sits on the white disc.
+  const w = 22 * scale, h = 25 * scale, top = cy - h / 2 - 2 * scale;
+  g.lineJoin = "round";
+  g.fillStyle = "#404F54";
+  g.strokeStyle = "#404F54";
+  g.lineWidth = 3 * scale;
+  g.beginPath();                                   // handle
+  g.rect(cx - 5 * scale, top - 6 * scale, 10 * scale, 3.5 * scale);
+  g.fill();
+  g.beginPath();                                   // lid
+  g.rect(cx - w / 2 - 2.5 * scale, top - 2.5 * scale, w + 5 * scale, 5 * scale);
+  g.fill();
+  g.beginPath();                                   // tapered body
+  g.moveTo(cx - w / 2, top + 4 * scale);
+  g.lineTo(cx + w / 2, top + 4 * scale);
+  g.lineTo(cx + w / 2 - 3.5 * scale, top + 4 * scale + h);
+  g.lineTo(cx - w / 2 + 3.5 * scale, top + 4 * scale + h);
+  g.closePath();
+  g.fill();
+  g.strokeStyle = "#ffffff";                       // ribs, knocked out
+  g.lineWidth = 2 * scale;
+  [-6, 0, 6].forEach(dx => {
+    g.beginPath();
+    g.moveTo(cx + dx * scale, top + 9 * scale);
+    g.lineTo(cx + dx * 0.72 * scale, top + h);
+    g.stroke();
+  });
+}
+
+function canIconImage(n) {
+  const S = 64, dpr = 2.6;              // 64px art shown at ~24px
+  const CX = 32, CY = 34, R = 21;       // the disc; the badge rides above it
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+
+  // White disc behind the can. Aerial imagery is busy and mostly mid-tone, so
+  // a plain emoji gets lost in it; the disc gives every marker the same
+  // background whatever it happens to be sitting on.
+  g.shadowColor = "rgba(0,0,0,0.5)";
+  g.shadowBlur = 5;
+  g.shadowOffsetY = 1.5;
+  g.beginPath();
+  g.arc(CX, CY, R, 0, Math.PI * 2);
+  g.fillStyle = "#ffffff";
+  g.fill();
+  g.shadowColor = "transparent";
+  g.lineWidth = 1.6;
+  g.strokeStyle = "rgba(64,79,84,0.45)";
+  g.stroke();
+
+  if (EMOJI_OK) {
+    g.font = '29px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    g.fillStyle = "#404F54";
+    g.fillText("\u{1F5D1}\uFE0F", CX, CY + 1);
+  } else {
+    drawVectorCan(g, CX, CY, 1);
+  }
+
+  if (n > 1) {                          // count badge, CPD accent yellow
+    g.beginPath();
+    g.arc(S - 13, 12, 11.5, 0, Math.PI * 2);
+    g.fillStyle = "#F4C913";
+    g.fill();
+    g.lineWidth = 2.2;
+    g.strokeStyle = "#404F54";
+    g.stroke();
+    g.fillStyle = "#404F54";
+    g.font = '700 15px "Roboto Condensed","Arial Narrow",sans-serif';
+    g.fillText(String(n), S - 13, 13);
+  }
+  return { data: g.getImageData(0, 0, S, S), pixelRatio: dpr };
+}
+
+function addCans() {
+  const counts = [...new Set(POINTS.map(p => p.n))];
+  counts.forEach(n => {
+    const img = canIconImage(n);
+    if (!map.hasImage("can-" + n)) map.addImage("can-" + n, img.data, { pixelRatio: img.pixelRatio });
+  });
+
+  map.addSource("cans", {
+    type: "geojson",
+    data: {
+      type: "FeatureCollection",
+      features: POINTS.map(p => ({
+        type: "Feature",
+        properties: { address: p.address, n: p.n, also: JSON.stringify(p.also || []) },
+        geometry: { type: "Point", coordinates: [p.lon, p.lat] }
+      }))
+    }
+  });
+
+  map.addLayer({
+    id: "cans", type: "symbol", source: "cans",
+    layout: {
+      // Off until a ward is picked: citywide, 480-odd markers bury the
+      // choropleth they are meant to illustrate.
+      visibility: "none",
+      "icon-image": ["concat", "can-", ["to-string", ["get", "n"]]],
+      // The markers only ever show in the detail view, so the ramp is tuned to
+      // that range: readable the moment a ward fills the frame, full size once
+      // you are down at street level.
+      "icon-size": ["interpolate", ["linear"], ["zoom"],
+                    11.5, 0.72, 13, 0.9, 15, 1.1, 17, 1.25],
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true
+    }
+  });
+
+  map.on("mousemove", "cans", e => {
+    map.getCanvas().style.cursor = "pointer";
+    showTip(canTooltip(e.features[0].properties), e.point);
+  });
+  map.on("mouseleave", "cans", () => { map.getCanvas().style.cursor = ""; hideTip(); });
+
+  // Pressing a can goes down to it -- close enough to see the sidewalk it is
+  // on, far enough out to keep the block around it in frame.
+  map.on("click", "cans", e => {
+    const f = e.features[0];
+    map.easeTo({ center: f.geometry.coordinates,
+                 zoom: Math.max(map.getZoom(), 16.4),
+                 duration: 900 });
+    showTip(canTooltip(f.properties), e.point);
+  });
+}
+
+// ---- bounding box of a ward ------------------------------------------------
+// MapLibre has no getBounds() on a feature, so walk the rings.
+function featureBounds(f) {
+  const b = new maplibregl.LngLatBounds();
+  f.geometry.coordinates.forEach(ring => ring.forEach(c => b.extend(c)));
+  return b;
+}
+
+// ---- legend ----------------------------------------------------------------
+const legendEl = document.getElementById("legend");
+
+function choroplethLegend() {
+  let lo = 0, rows = "";
+  META.count_breaks.forEach((b, i) => {
+    const hi = Math.round(b);
+    rows += '<div class="legend-chip"><span class="dot" style="background:' +
+            META.colors[i] + '"></span>' +
+            (i === 0 ? "Up to " + hi : (lo + 1) + "&ndash;" + hi) + "</div>";
+    lo = hi;
+  });
+  return '<div class="legend-title">' + COUNT_LABEL + "</div>" + rows;
+}
+
+// In the detail view there is no shading left to explain, so the legend
+// switches to what the markers mean.
+function canLegend() {
+  const many = POINTS.some(p => p.n > 1);
+  return '<div class="legend-title">Trash cans</div>' +
+         '<div class="legend-chip"><span class="legend-can">\u{1F5D1}\uFE0F</span>One can</div>' +
+         (many ? '<div class="legend-chip"><span class="legend-badge">3</span>Several at one spot</div>' : "");
+}
+
+function legendUpdate() {
+  legendEl.innerHTML = selected === null ? choroplethLegend() : canLegend();
+}
+
+// ---- side table ------------------------------------------------------------
+const tbody = document.querySelector("#tbl tbody");
+
+function renderTable() {
+  const rows = DATA.features.map(f => f.properties).sort((a, b) => b.count - a.count);
+  tbody.innerHTML = rows.map(p =>
+    '<tr data-ward="' + p.ward + '">' +
+      '<td><span class="swatch" style="background:' + color(p) + '"></span>' + p.name + "</td>" +
+      "<td>" + fmt(p.count) + "</td>" +
+      "<td>" + fmt(p.population) + "</td>" +
+      "<td>" + p.per_10k + "</td>" +
+    "</tr>").join("");
+  [...tbody.rows].forEach(tr => tr.onclick = () => select(+tr.dataset.ward));
+  if (selected !== null) markRow(selected);
+}
+
+function markRow(ward) {
+  [...tbody.rows].forEach(tr => tr.classList.toggle("selected", +tr.dataset.ward === ward));
+}
+
+const resetBtn = document.getElementById("reset");
+
+// Two views of the same map. Citywide: ward shading, no markers. Ward picked:
+// zoomed in, shading gone, every can on the bare imagery.
+function showDetail(on) {
+  if (map.getLayer("ward-fill"))
+    map.setPaintProperty("ward-fill", "fill-opacity", on ? 0 : FILL_OPACITY);
+  if (map.getLayer("cans"))
+    map.setLayoutProperty("cans", "visibility", on ? "visible" : "none");
+  legendUpdate();
+}
+
+function select(ward) {
+  if (selected !== null) map.setFeatureState({ source: "wards", id: selected }, { selected: false });
+  selected = ward;
+  map.setFeatureState({ source: "wards", id: ward }, { selected: true });
+  markRow(ward);
+  const f = DATA.features.find(f => f.properties.ward === ward);
+  if (f) map.fitBounds(featureBounds(f), { padding: 40 });
+  hideTip();
+  showDetail(true);
+  resetBtn.classList.add("show");
+  const tr = tbody.querySelector('tr[data-ward="' + ward + '"]');
+  if (tr) tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+resetBtn.onclick = () => {
+  if (selected !== null) map.setFeatureState({ source: "wards", id: selected }, { selected: false });
+  selected = null;
+  markRow(-1);
+  hideTip();
+  showDetail(false);
+  map.fitBounds(CITY_BOUNDS, { padding: 48 });
+  resetBtn.classList.remove("show");
+};
+
+// ---- chrome ----------------------------------------------------------------
+document.title = META.heading;
+document.getElementById("heading").textContent = META.heading;
+
+document.getElementById("subheading").textContent =
+  fmt(META.mapped) + " " + META.noun + " mapped across the city’s 15 wards.";
+
+document.getElementById("source").innerHTML =
+  "Source: City of Cleveland public trash can locations and 2026 ward boundaries (Ord. No. 1-2025), " +
+  "City of Cleveland Open Data. Population is U.S. Census Bureau American Community Survey " +
+  "2020–2024 five-year estimates, aggregated by ward (citywide " + fmt(META.city_pop) + "). " +
+  "Imagery: Esri, Maxar, Earthstar Geographics.";
+
+// ---- embed auto-height -----------------------------------------------------
+// Replaces pym.js (pym.nprapps.com is dead). Parent listener: wordpress-embed.html
+(function () {
+  var lastHeight = 0;
+  function postHeight() {
+    var h = Math.ceil(document.querySelector(".viz-container").getBoundingClientRect().height) + 64;
+    if (h === lastHeight) return;
+    lastHeight = h;
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "embed-height", height: h }, "*");
+    }
+  }
+  window.addEventListener("load", postHeight);
+  window.addEventListener("resize", postHeight);
+  setInterval(postHeight, 500);
+  postHeight();
+})();
+</script>
+</body>
+</html>
