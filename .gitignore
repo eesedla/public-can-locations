@@ -4,7 +4,8 @@
 /debris-in-street/
 /new-container-requests/
 /data/debris in street.csv
-/data/new container requests.csv
+/data/new container requests*.csv
+/new-container-requests/Data_311_*.csv
 /assets/template.html
 
 # The receptacle export as delivered. data/public receptacles.csv is the same

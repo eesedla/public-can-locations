@@ -22,8 +22,9 @@ Output, per dataset
   <slug>/index.html            self-contained interactive map
   <slug>/wordpress-embed.html  parent-page listener for the iframe
   <slug>/by_ward.csv           the underlying ward summary table
-  <slug>/data.csv              point datasets: the cleaned location table
-                               (address, lat, lon, cans at that spot, ward)
+  <slug>/data.csv              the cleaned row-level table -- one row per
+                               request (with its ward) for 311 datasets, one
+                               row per location for point datasets
 
 The method, in four steps:
   1. Parse ward polygons out of the local GeoJSON.
@@ -58,8 +59,12 @@ DATASETS = [
                   "call more often will rank higher.",
     },
     {
-        "csv": "new container requests.csv",
+        "csv": "new container requests 2026-11.csv",
         "slug": "new-container-requests",
+        # The city's export reaches back to April 2024, but the map covers
+        # January 2025 onward. Requests before this are dropped before any
+        # counting, so every figure on the map shares one window.
+        "since": (2025, 1, 1),
         "heading": "Where Clevelanders ask for new public trash cans",
         "noun": "\u201cNew Public Street Receptacle\u201d service requests",
         "caveat": "311 data records requests, not need: a ward with an engaged, "
@@ -174,37 +179,116 @@ def simplify(points, tol_deg):
 
 # -------------------------------------------------------------- step 2: counts
 
-def load_reports(path):
-    """Return (rows, per-ward counter, per-neighborhood counter, notes)."""
-    with open(path, encoding="utf-8-sig") as fh:
-        rows = list(csv.DictReader(fh))
+# The city's 311 exports have changed their column spellings at least once:
+# the older files use snake_case ("requested_datetime"), the November 2026
+# export Title Case with spaces ("Requested Date and Time"). Read either, and
+# say so plainly if a needed column is missing rather than silently counting
+# every row as unassigned.
+#
+# Ward is read from the 2026 column, because the map draws 2026 boundaries.
+COLUMN_ALIASES = {
+    "ward":         ["ward_2026", "Ward (2026)", "ward", "Ward"],
+    "status":       ["status_description", "Status"],
+    "requested":    ["requested_datetime", "Requested Date and Time"],
+    "neighborhood": ["neighborhood", "Neighborhood"],
+    "address":      ["Address", "address"],
+    "lat":          ["lat", "Latitude"],
+    "lon":          ["long", "Longitude"],
+}
 
+
+def resolve_columns(fieldnames):
+    """Map our internal field names onto whichever spelling this export uses."""
+    present = {(f or "").strip(): f for f in (fieldnames or [])}
+    cols, missing = {}, []
+    for key, candidates in COLUMN_ALIASES.items():
+        for cand in candidates:
+            if cand in present:
+                cols[key] = present[cand]
+                break
+        else:
+            missing.append(key)
+    if missing:
+        raise SystemExit(
+            "This CSV has no column for: " + ", ".join(missing)
+            + "\n  columns seen: " + ", ".join(sorted(c for c in present if c))
+            + "\n  add the new spelling to COLUMN_ALIASES in build_maps.py.")
+    return cols
+
+
+def parse_requested(s):
+    """'10/31/2026 4:55:30 PM' -> (2026, 10, 31), or None."""
+    m = re.match(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})", s or "")
+    return (int(m.group(3)), int(m.group(1)), int(m.group(2))) if m else None
+
+
+def requested_key(s):
+    """The same stamp down to the second, for sorting. Sorts unparseable last."""
+    m = re.match(r"\s*(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s*([AP]M)?", s or "")
+    if not m:
+        return (9999, 99, 99, 99, 99, 99)
+    mon, day, year, hh, mm, ss, ampm = m.groups()
+    hh = int(hh) % 12 if ampm else int(hh)
+    if ampm == "PM":
+        hh += 12
+    return (int(year), int(mon), int(day), hh, int(mm), int(ss))
+
+
+def load_reports(path, since=None):
+    """Return (rows, per-ward counters, per-neighborhood counter, notes).
+
+    One row is one service request. `since` is a (year, month, day) floor on the
+    requested date -- requests older than it are dropped before anything is
+    counted, so every figure on the map reflects the same window. Each returned
+    row carries the ward the city assigned it.
+    """
+    with open(path, encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        cols = resolve_columns(reader.fieldnames)
+        raw_rows = list(reader)
+
+    rows = []
+    before_window = 0
     by_ward = Counter()
     by_ward_open = Counter()
     by_ward_year = defaultdict(Counter)
     by_neighborhood = defaultdict(Counter)
     unassigned = 0
 
-    for r in rows:
-        raw = (r.get("ward") or "").strip()
-        if not raw:
+    for r in raw_rows:
+        requested = (r.get(cols["requested"]) or "").strip()
+        when = parse_requested(requested)
+        if since and (when is None or when < since):
+            before_window += 1
+            continue
+
+        ward_raw = (r.get(cols["ward"]) or "").strip()
+        rec = {
+            "requested": requested,
+            "year": str(when[0]) if when else "",
+            "address": " ".join((r.get(cols["address"]) or "").split()),
+            "neighborhood": (r.get(cols["neighborhood"]) or "").strip(),
+            "status": (r.get(cols["status"]) or "").strip(),
+            "lat": (r.get(cols["lat"]) or "").strip(),
+            "lon": (r.get(cols["lon"]) or "").strip(),
+            "ward": int(float(ward_raw)) if ward_raw else None,
+        }
+        rows.append(rec)
+
+        w = rec["ward"]
+        if w is None:
             unassigned += 1
             continue
-        w = int(float(raw))
         by_ward[w] += 1
-        if (r.get("status_description") or "").strip().lower() == "open":
+        if rec["status"].lower() == "open":
             by_ward_open[w] += 1
+        if rec["year"]:
+            by_ward_year[w][rec["year"]] += 1
+        if rec["neighborhood"]:
+            by_neighborhood[w][rec["neighborhood"]] += 1
 
-        # "7/19/2026 3:40:44 PM" -> 2026
-        m = re.match(r"\d+/\d+/(\d{4})", r.get("requested_datetime") or "")
-        if m:
-            by_ward_year[w][m.group(1)] += 1
-
-        nb = (r.get("neighborhood") or "").strip()
-        if nb:
-            by_neighborhood[w][nb] += 1
-
-    return rows, by_ward, by_ward_open, by_ward_year, by_neighborhood, unassigned
+    return (rows, by_ward, by_ward_open, by_ward_year, by_neighborhood,
+            unassigned, before_window)
 
 
 def tidy_address(raw):
@@ -339,9 +423,12 @@ def build(ds):
     csv_out = os.path.join(outdir, "by_ward.csv")
     embed_out = os.path.join(outdir, "wordpress-embed.html")
 
+    requests_out = os.path.join(outdir, "data.csv")
+
     wards = parse_wards(WARDS_GEOJSON_IN)
-    rows, by_ward, by_ward_open, by_ward_year, by_neighborhood, unassigned = load_reports(
-        os.path.join(DATA_DIR, ds["csv"]))
+    (rows, by_ward, by_ward_open, by_ward_year, by_neighborhood,
+     unassigned, before_window) = load_reports(
+        os.path.join(DATA_DIR, ds["csv"]), ds.get("since"))
 
     years = sorted({y for c in by_ward_year.values() for y in c})
 
@@ -403,6 +490,14 @@ def build(ds):
                 + ["; ".join(f'{n["name"]} ({n["n"]})' for n in s["top_neighborhoods"])]
             )
 
+    # ---- one row per request, with its ward ------------------------------
+    with open(requests_out, "w", newline="", encoding="utf-8") as fh:
+        wr = csv.writer(fh)
+        wr.writerow(["requested", "ward", "neighborhood", "address", "status", "lat", "lon"])
+        for r in sorted(rows, key=lambda r: requested_key(r["requested"])):
+            wr.writerow([r["requested"], r["ward"] if r["ward"] is not None else "",
+                         r["neighborhood"], r["address"], r["status"], r["lat"], r["lon"]])
+
     # ---- HTML map --------------------------------------------------------
     meta = {
         "total": len(rows),
@@ -430,7 +525,12 @@ def build(ds):
         fh.write(embed)
 
     print(f"=== {ds['slug']} ===")
+    if ds.get("since"):
+        y, m, d = ds["since"]
+        print(f"window: requests on or after {y}-{m:02d}-{d:02d} "
+              f"({before_window} earlier rows dropped)")
     print(f"reports total {len(rows)}, placed in a ward {meta['mapped']}, unassigned {unassigned}")
+    print(f"years present {', '.join(years)}")
     print(f"citywide ACS population {meta['city_pop']:,}")
     print(f"count breaks   {count_breaks}")
     print(f"rate breaks    {rate_breaks}")
@@ -441,6 +541,7 @@ def build(ds):
               f'{s["per_10k"]:>9.1f} {s["per_10k_moe"]:>6.1f}  {s["council_member"]}')
     print(f"\nwrote {html_out}")
     print(f"wrote {csv_out}")
+    print(f"wrote {requests_out}")
     print(f"wrote {embed_out}\n")
     return summary
 
