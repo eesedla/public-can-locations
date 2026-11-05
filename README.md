@@ -3,10 +3,18 @@
 An interactive map of the city's public street receptacles, shaded by ward and
 plotted on aerial imagery. Built for Signal Cleveland.
 
+**Live: https://eesedla.github.io/public-can-locations/**
+
 `public-trashcan-locations/index.html` is the map: one self-contained file,
-nothing to install, drop it on any static host.
+nothing to install, drop it on any static host. The `index.html` at the repo
+root only forwards to it, because GitHub Pages serves a site from the root and
+the build writes each map into its own folder.
+
 `public-trashcan-locations/wordpress-embed.html` is the parent-page snippet
-that frames it and keeps the iframe at the right height.
+that frames it and keeps the iframe at the right height. Point its iframe at
+the map's own path, not at the site root:
+
+    https://eesedla.github.io/public-can-locations/public-trashcan-locations/
 
 ## Reading the map
 

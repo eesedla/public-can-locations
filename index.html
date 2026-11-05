@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where Cleveland’s public trash cans are</title>
+
+<!--
+  Site entry point for GitHub Pages.
+
+  The map itself is built to public-trashcan-locations/index.html, because
+  build_maps.py writes every map into its own slug folder. GitHub Pages can
+  only serve a site from the repo root or /docs, so this sends the root
+  straight through to the map rather than letting Jekyll render README.md as
+  the front page.
+
+  To embed the map, point the iframe at the map's own path, not at this file:
+  https://eesedla.github.io/public-can-locations/public-trashcan-locations/
+-->
+
+<link rel="canonical" href="https://eesedla.github.io/public-can-locations/public-trashcan-locations/">
+<meta http-equiv="refresh" content="0; url=public-trashcan-locations/">
+<script>location.replace("public-trashcan-locations/" + location.search + location.hash);</script>
+
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    color: #404F54;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    font-size: 15px;
+  }
+  a { color: #23685b; }
+</style>
+</head>
+<body>
+  <p>Loading the map — <a href="public-trashcan-locations/">open it directly</a>.</p>
+</body>
+</html>
