@@ -34,6 +34,14 @@ area. Below zoom 13 the bubbles stop and every can draws on its own; pressing
 one goes down to the block it sits on. Several cans at one corner stay a single
 marker carrying the count.
 
+"Near me" asks the browser for your location and drops you at zoom 16, past
+the point where bubbles give way to individual cans, with the nearest can's
+address and distance. It needs a secure context, so it only works over https,
+and **inside an iframe the embedding page has to pass the permission down with
+`allow="geolocation"`** — `wordpress-embed.html` already carries it. Without
+that the button reports it was blocked rather than failing silently. Readers
+outside Cleveland are told there is nothing mapped around them.
+
 Ward outlines are drawn for orientation only — nothing is shaded by ward. The
 side table ranks the wards and gives cans per 10,000 residents, which controls
 for ward size, though because redistricting draws wards to near-equal

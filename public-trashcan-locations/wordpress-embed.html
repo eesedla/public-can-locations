@@ -5,12 +5,18 @@
   Pairs with the auto-height script at the bottom of index.html, which posts
   { type: 'embed-height', height } to the parent every 500ms.
   (pym.js replacement -- the NPR CDN at pym.nprapps.com is dead.)
+
+  allow="geolocation" is what lets the map's "Near me" button work. A page
+  cannot hand an iframe a permission it does not hold itself, so the parent
+  page has to be served over https too, or the browser refuses and the
+  button reports that it was blocked.
 -->
 
 <iframe
   id="cpd-public-trashcan-locations"
   src="EMBED_URL"
   title="Where Cleveland’s public trash cans are"
+  allow="geolocation"
   scrolling="no"
   frameborder="0"
   style="width:100%;border:0;display:block;height:820px;"

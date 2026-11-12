@@ -419,6 +419,25 @@ def class_of(value, breaks):
     return len(breaks) - 1
 
 
+def write_embed(ds, path, geolocation=False):
+    """The parent-page snippet. Only a map with a "Near me" button asks the
+    embedding page for the geolocation permission; handing it to a map that
+    never calls for it would be noise."""
+    note = ('\n  allow="geolocation" is what lets the map\'s "Near me" button work. A page\n'
+            '  cannot hand an iframe a permission it does not hold itself, so the parent\n'
+            '  page has to be served over https too, or the browser refuses and the\n'
+            '  button reports that it was blocked.\n') if geolocation else ""
+    attr = '\n  allow="geolocation"' if geolocation else ""
+    with open(EMBED_TPL_IN, encoding="utf-8") as fh:
+        embed = fh.read()
+    embed = (embed.replace("__SLUG__", ds["slug"])
+                  .replace("__HEADING__", ds["heading"])
+                  .replace("__ALLOW_NOTE__", note)
+                  .replace("__ALLOW_ATTR__", attr))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(embed)
+
+
 def build(ds):
     """Build one map. `ds` is an entry from DATASETS."""
     outdir = os.path.join(HERE, ds["slug"])
@@ -522,11 +541,7 @@ def build(ds):
     with open(html_out, "w", encoding="utf-8") as fh:
         fh.write(html)
 
-    with open(EMBED_TPL_IN, encoding="utf-8") as fh:
-        embed = fh.read()
-    embed = embed.replace("__SLUG__", ds["slug"]).replace("__HEADING__", ds["heading"])
-    with open(embed_out, "w", encoding="utf-8") as fh:
-        fh.write(embed)
+    write_embed(ds, embed_out)
 
     print(f"=== {ds['slug']} ===")
     if ds.get("since"):
@@ -664,11 +679,7 @@ def build_points(ds):
     with open(html_out, "w", encoding="utf-8") as fh:
         fh.write(html)
 
-    with open(EMBED_TPL_IN, encoding="utf-8") as fh:
-        embed = fh.read()
-    embed = embed.replace("__SLUG__", ds["slug"]).replace("__HEADING__", ds["heading"])
-    with open(embed_out, "w", encoding="utf-8") as fh:
-        fh.write(embed)
+    write_embed(ds, embed_out, geolocation=True)
 
     print(f"=== {ds['slug']} ===")
     print(f"trash cans total {len(points)}, placed in a ward {meta['mapped']}, unassigned {unassigned}")

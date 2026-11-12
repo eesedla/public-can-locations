@@ -185,12 +185,17 @@
     background-repeat: no-repeat;
   }
 
-  /* ---- reset button ---- */
-  .map-reset {
+  /* ---- map buttons ---- */
+  /* A row, so "Near me" slides left when "Whole city" is not showing. */
+  .map-buttons {
     position: absolute;
     top: 10px;
     left: 10px;
     z-index: 2;
+    display: flex;
+    gap: 6px;
+  }
+  .map-btn {
     font-family: var(--rc);
     font-weight: 500;
     font-size: 0.78rem;
@@ -201,10 +206,41 @@
     color: var(--ink);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0,0,0,0.28);
-    display: none;
+    white-space: nowrap;
   }
-  .map-reset.show { display: block; }
-  .map-reset:hover { border-color: var(--teal); }
+  .map-btn:hover { border-color: var(--teal); }
+  .map-btn[disabled] { opacity: .6; cursor: default; }
+  #reset { display: none; }
+  #reset.show { display: block; }
+
+  /* MapLibre's own geolocate button is hidden; this page drives the control
+     from #locate instead, so the button matches the others. */
+  .maplibregl-ctrl-geolocate { display: none; }
+
+  /* ---- toast ---- */
+  /* Geolocation fails quietly otherwise: denied, timed out, or simply not in
+     Cleveland. This says so and gets out of the way. */
+  .map-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 42px;
+    transform: translateX(-50%);
+    z-index: 6;
+    max-width: 84%;
+    background: var(--ink);
+    color: #fff;
+    font-family: var(--inter);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    padding: 8px 13px;
+    border-radius: 2px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s;
+    text-align: center;
+  }
+  .map-toast.visible { opacity: 1; }
 
   /* ---- tooltip ---- */
   /* Canonical .bar-tooltip spec. MapLibre has no sticky-tooltip primitive, so
@@ -280,7 +316,11 @@
   <div class="viz-body">
     <div class="map-wrap">
       <div id="map"></div>
-      <button class="map-reset" id="reset">Whole city</button>
+      <div class="map-buttons">
+        <button class="map-btn" id="reset">Whole city</button>
+        <button class="map-btn" id="locate">Near me</button>
+      </div>
+      <div class="map-toast" id="toast"></div>
       <div class="legend" id="legend"></div>
       <div class="bar-tooltip" id="tip"></div>
     </div>
@@ -657,6 +697,85 @@ resetBtn.onclick = () => {
   map.fitBounds(CITY_BOUNDS, { padding: 48 });
   resetBtn.classList.remove("show");
 };
+
+// ---- "Near me" --------------------------------------------------------------
+// MapLibre's GeolocateControl does the permission dance, the blue dot and the
+// accuracy ring; its own button is hidden in CSS and #locate triggers it, so
+// the control matches the other buttons instead of MapLibre's chrome.
+//
+// Geolocation needs a secure context, and inside an iframe the embedding page
+// has to hand the permission down with allow="geolocation" -- see
+// wordpress-embed.html. Without it the browser refuses and we say so.
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function toast(msg, ms) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("visible");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("visible"), ms || 5000);
+}
+
+const locateBtn = document.getElementById("locate");
+
+if (!navigator.geolocation || !window.isSecureContext) {
+  locateBtn.disabled = true;
+  locateBtn.title = "Your browser will only share location over a secure connection";
+} else {
+  const geolocate = new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    trackUserLocation: false,
+    showUserLocation: true,
+    showAccuracyCircle: true,
+    // Past the clustering cutoff, so you land among individual cans rather
+    // than a bubble covering your neighborhood.
+    fitBoundsOptions: { maxZoom: 16 }
+  });
+  map.addControl(geolocate);
+
+  // Is this somewhere the map has anything to show?
+  const inCity = (lng, lat) =>
+    lng > CITY_BOUNDS[0][0] - 0.05 && lng < CITY_BOUNDS[1][0] + 0.05 &&
+    lat > CITY_BOUNDS[0][1] - 0.04 && lat < CITY_BOUNDS[1][1] + 0.04;
+
+  geolocate.on("geolocate", e => {
+    locateBtn.disabled = false;
+    const { longitude: lng, latitude: lat } = e.coords;
+    selected = null;
+    markRow(-1);
+    showReset();
+    if (inCity(lng, lat)) {
+      const near = POINTS.reduce((best, p) => {
+        const d = Math.hypot(p.lat - lat, (p.lon - lng) * 0.75) * 111000;
+        return d < best.d ? { d: d, p: p } : best;
+      }, { d: Infinity, p: null });
+      toast(near.p && near.d < 1200
+        ? "Nearest can: " + near.p.address + ", about " + Math.round(near.d) + " m away"
+        : "No public cans mapped within a kilometre of you.");
+    } else {
+      toast("You are outside Cleveland, so there are no cans mapped around you. " +
+            "Showing where you are anyway.", 7000);
+    }
+  });
+
+  geolocate.on("error", err => {
+    locateBtn.disabled = false;
+    toast(err && err.code === 1
+      ? "Location permission was denied, so the map cannot show what is near you."
+      : "Could not work out where you are. Try again, or zoom in by hand.");
+  });
+
+  locateBtn.onclick = () => {
+    hideTip();
+    locateBtn.disabled = true;
+    toast("Finding you\u2026", 12000);
+    // The control only accepts trigger() once the browser has reported whether
+    // geolocation is available at all, which it does just after setup.
+    if (geolocate.trigger() === false) {
+      locateBtn.disabled = false;
+      toast("This browser will not share your location with the map.");
+    }
+  };
+}
 
 // ---- chrome ----------------------------------------------------------------
 document.title = META.heading;
