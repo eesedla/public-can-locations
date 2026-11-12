@@ -18,15 +18,27 @@ the map's own path, not at the site root:
 
 ## Reading the map
 
-Citywide it is a choropleth: each of the 15 wards shaded by how many public
-cans it holds, in four quantile classes, so roughly four wards fall in each
-color band. The side table ranks the wards and also gives cans per 10,000
-residents, which controls for ward size — though because redistricting draws
-wards to near-equal population, that ranking stays close to the raw count.
+Citywide the cans gather into bubbles, one per area rather than one per can.
+A bubble says how many cans it stands for twice over: in how big it is and in
+how dark it is, with the exact number on the tag. Both channels carry the same
+figure, which is the only honest way to spend two of them on one variable.
+Bubbles holding many cans sit slightly sheer so the ground still reads through;
+once you are down to a can or two they go solid.
 
-Pressing a ward zooms to it, drops the shading, and puts every can on the bare
-imagery. Pressing a can goes down to the block it sits on. Several cans at one
-spot draw as a single marker carrying the count.
+Diameter runs as `count^0.28`, not the square root that true area scaling would
+want — at 830 cans a true-area bubble would cover the lake. The size carries
+the gist, the tag carries the precision.
+
+Pressing a bubble zooms to where it breaks apart, so you walk down into an
+area. Below zoom 13 the bubbles stop and every can draws on its own; pressing
+one goes down to the block it sits on. Several cans at one corner stay a single
+marker carrying the count.
+
+Ward outlines are drawn for orientation only — nothing is shaded by ward. The
+side table ranks the wards and gives cans per 10,000 residents, which controls
+for ward size, though because redistricting draws wards to near-equal
+population that ranking stays close to the raw count. Pressing a row frames
+that ward.
 
 ## The data
 
@@ -82,6 +94,7 @@ Inputs:
 | `data/public-trashcan-locations-geocode-fixes.json` | hand corrections, keyed on the exact address string |
 | `assets/wards.geojson` | 2026 ward boundaries |
 | `assets/template-points.html` | the map itself — real HTML, CSS and JS, edit it directly |
+| `assets/can-glyph.png` | the trash can artwork, copied next to the map. The coloured disc behind it is drawn by the page, so the marker can take its color from the count. |
 | `assets/wordpress-embed-template.html` | the parent-page embed snippet |
 
 Outputs, all regenerated on every run:
@@ -89,6 +102,7 @@ Outputs, all regenerated on every run:
 | path | what it is |
 | --- | --- |
 | `public-trashcan-locations/index.html` | the map |
+| `public-trashcan-locations/can-glyph.png` | the marker artwork the map loads |
 | `public-trashcan-locations/wordpress-embed.html` | the embed snippet |
 | `public-trashcan-locations/by_ward.csv` | the ward summary table behind the map |
 | `public-trashcan-locations/data.csv` | the cleaned location table: address, coordinates, cans at that spot, ward |
@@ -105,3 +119,8 @@ MapLibre GL JS 4.7.1 with Esri World Imagery as a raster source, which has real
 tiles through zoom 19 over Cleveland where USGS imagery caps at 16. The
 attribution string — *Imagery: Esri, Maxar, Earthstar Geographics* — is Esri's
 condition of use and has to stay on the map.
+
+Bubbles are MapLibre's own clustering, summing cans rather than markers so a
+corner holding four cans counts as four. Cluster counts are only known once the
+map has tiled the data, so each bubble image is drawn on demand when MapLibre
+asks for it by name.

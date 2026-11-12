@@ -16,6 +16,8 @@ Inputs
   assets/wards.geojson          City of Cleveland 2026 ward boundaries
   assets/template.html          shared CPD-styled HTML shell (311 datasets)
   assets/template-points.html   shared HTML shell (point datasets)
+  assets/can-glyph.png          the can artwork, copied next to the map;
+                                the coloured disc under it is drawn in the page
 
 Output, per dataset
 -------------------
@@ -39,6 +41,7 @@ import json
 import math
 import os
 import re
+import shutil
 from collections import Counter, defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +51,7 @@ WARDS_GEOJSON_IN = os.path.join(ASSETS_DIR, "wards.geojson")
 TEMPLATE_IN = os.path.join(ASSETS_DIR, "template.html")
 TEMPLATE_POINTS_IN = os.path.join(ASSETS_DIR, "template-points.html")
 EMBED_TPL_IN = os.path.join(ASSETS_DIR, "wordpress-embed-template.html")
+CAN_MARKER_IN = os.path.join(ASSETS_DIR, "can-glyph.png")
 
 DATASETS = [
     {
@@ -648,6 +652,12 @@ def build_points(ds):
         "caveat": ds["caveat"],
     }
 
+    # The marker bitmap rides alongside index.html rather than being inlined:
+    # it is the one asset the page loads, and a cached PNG beats 100 KB of
+    # base64 re-parsed on every view.
+    marker_out = os.path.join(outdir, os.path.basename(CAN_MARKER_IN))
+    shutil.copyfile(CAN_MARKER_IN, marker_out)
+
     html = load_points_template().replace("__GEOJSON__", json.dumps(geojson, separators=(",", ":")))
     html = html.replace("__POINTS__", json.dumps(point_features, separators=(",", ":")))
     html = html.replace("__META__", json.dumps(meta, separators=(",", ":")))
@@ -677,6 +687,7 @@ def build_points(ds):
     print(f"\nwrote {html_out}")
     print(f"wrote {csv_out}")
     print(f"wrote {locations_out}")
+    print(f"wrote {marker_out}")
     print(f"wrote {embed_out}\n")
     return summary
 

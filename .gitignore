@@ -12,6 +12,11 @@
 # file under the name the build script reads, and that copy is tracked.
 /As of *.csv
 
+# Working files for the marker. assets/can-glyph.png -- the can lifted off its
+# baked-in disc -- is what the map actually loads, and that is tracked.
+/public-trashcan-locations/trash.png
+/assets/can-marker.png
+
 .DS_Store
 __pycache__/
 *.pyc
