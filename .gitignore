@@ -17,6 +17,11 @@
 /public-trashcan-locations/trash.png
 /assets/can-marker.png
 
+# faq/ is its own repository -- github.com/eesedla/trash-faq -- and happens to
+# sit inside this working folder. Ignoring it keeps git from trying to swallow
+# it as a submodule.
+/faq/
+
 .DS_Store
 __pycache__/
 *.pyc
