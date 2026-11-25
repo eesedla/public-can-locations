@@ -179,7 +179,6 @@
     display: block;
     border-radius: 50%;
     border: 1.5px solid var(--teal);
-    background-image: url(can-glyph.png);
     background-size: 74%;
     background-position: center;
     background-repeat: no-repeat;
@@ -291,6 +290,15 @@
   }
   .viz-source a { color: inherit; }
 
+  /* Below this the map and table stack, so both have to give height back or
+     the embed becomes a very long scroll on a phone. */
+  @media (max-width: 640px) {
+    .map-wrap { height: 420px; }
+    .viz-side { height: 300px; padding: 12px 20px 16px; }
+    .legend { top: 8px; right: 8px; padding: 7px 9px; }
+    .legend-bubbles { gap: 7px; }
+  }
+
   /* MapLibre's attribution over imagery: keep it legible but quiet. */
   .maplibregl-ctrl-attrib {
     font-family: var(--inter);
@@ -349,6 +357,14 @@ const fmt = n => n.toLocaleString("en-US");
 // The whole city. Matches the ward file's own bounding box.
 const CITY_BOUNDS = [[-81.87910, 41.39074], [-81.53291, 41.59951]];
 
+// Padding has to scale with the box. A flat 48px is comfortable in a desktop
+// column and absurd on a phone, where it would eat a third of the width and
+// push the city down two zoom levels.
+function fitPadding() {
+  const w = (document.querySelector(".map-wrap") || {}).clientWidth || 600;
+  return Math.max(10, Math.min(48, Math.round(w * 0.07)));
+}
+
 // Pressing a can drops to this zoom: close enough to see the sidewalk it is
 // on, far enough out to keep the block around it in frame.
 const CAN_ZOOM = 16.4;
@@ -376,18 +392,33 @@ const map = new maplibregl.Map({
     layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
   },
   bounds: CITY_BOUNDS,
-  fitBoundsOptions: { padding: 48 },
+  fitBoundsOptions: { padding: fitPadding() },
   maxZoom: 19
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-left");
+
+// Is the reader still looking at the whole city, or have they gone somewhere?
+let atHome = true;
+function leaveHome() { atHome = false; }
 
 // MapLibre watches the window, not its own container. Inside an embed the
 // container changes width on its own -- webfonts landing, the parent page
 // reflowing, a phone rotating -- and without this the canvas keeps the old
 // size and the map ends up drawn into part of the box.
+//
+// resize() keeps the centre and zoom, not the bounds, so a container that
+// grows after the first fit leaves the city as a speck in the middle of Lake
+// Erie. While the reader has not navigated anywhere, re-fit instead.
 if (window.ResizeObserver) {
-  new ResizeObserver(() => map.resize()).observe(document.querySelector(".map-wrap"));
+  new ResizeObserver(() => {
+    map.resize();
+    if (atHome) map.fitBounds(CITY_BOUNDS, { padding: fitPadding(), duration: 0 });
+  }).observe(document.querySelector(".map-wrap"));
 }
+
+// Any real navigation means the view is theirs now, not ours to re-fit.
+["dragstart", "rotatestart", "pitchstart"].forEach(ev => map.on(ev, leaveHome));
+map.on("zoomstart", e => { if (e.originalEvent) leaveHome(); });
 
 // ---- the marker -------------------------------------------------------------
 // The can artwork is drawn over a disc this code paints, rather than the disc
@@ -398,7 +429,11 @@ if (window.ResizeObserver) {
 // Diameter runs as count^0.28, not the square root that true area scaling
 // would want -- at 830 cans a true-area bubble would swallow the lake. The
 // number on the bubble carries the precision; size and colour carry the gist.
-const ICON_SRC = "can-glyph.png";
+// The marker rides inside the page as a data URI rather than sitting beside
+// it as a file. One file has no relative paths to resolve, so the map works
+// the same uploaded as a ZIP, dropped on a static host, or pasted into a CMS
+// block -- none of which agree about where a sibling file lives.
+const ICON_SRC = "__CAN_ICON__";
 const DPR = 2;
 
 // CPD teal ramp, palest to primary.
@@ -593,6 +628,7 @@ function addLayers() {
   // into smaller ones first, which is the point -- you walk down into an area.
   map.on("click", "clusters", e => {
     const f = e.features[0];
+    leaveHome();
     const src = map.getSource("cans");
     const go = z => {
       map.easeTo({ center: f.geometry.coordinates,
@@ -610,6 +646,7 @@ function addLayers() {
   // Press a can: drop to its block.
   map.on("click", "can-points", e => {
     const f = e.features[0];
+    leaveHome();
     map.easeTo({ center: f.geometry.coordinates,
                  zoom: Math.max(map.getZoom(), CAN_ZOOM),
                  duration: 900 });
@@ -621,7 +658,7 @@ function addLayers() {
 map.on("load", () => {
   const img = new Image();
   img.onload = () => { markerImg = img; addLayers(); };
-  img.onerror = () => { console.error("could not load " + ICON_SRC); addLayers(); };
+  img.onerror = () => { console.error("the marker image failed to decode"); addLayers(); };
   img.src = ICON_SRC;
 
   renderTable();
@@ -647,6 +684,7 @@ function legendUpdate() {
     return '<div class="legend-bubble-row">' +
            '<span class="legend-bubble" style="width:' + px + "px;height:" + px +
              "px;background-color:" + bubbleFill(n) +
+             ";background-image:url(" + ICON_SRC + ")" +
              ";opacity:" + bubbleAlpha(n) + '"></span>' +
            "<span>" + label + "</span>" +
            "</div>";
@@ -680,6 +718,7 @@ const resetBtn = document.getElementById("reset");
 function showReset() { resetBtn.classList.add("show"); }
 
 function selectWard(ward) {
+  leaveHome();
   selected = ward;
   markRow(ward);
   hideTip();
@@ -692,9 +731,10 @@ function selectWard(ward) {
 
 resetBtn.onclick = () => {
   selected = null;
+  atHome = true;
   markRow(-1);
   hideTip();
-  map.fitBounds(CITY_BOUNDS, { padding: 48 });
+  map.fitBounds(CITY_BOUNDS, { padding: fitPadding() });
   resetBtn.classList.remove("show");
 };
 
@@ -739,6 +779,7 @@ if (!navigator.geolocation || !window.isSecureContext) {
 
   geolocate.on("geolocate", e => {
     locateBtn.disabled = false;
+    leaveHome();
     const { longitude: lng, latitude: lat } = e.coords;
     selected = null;
     markRow(-1);

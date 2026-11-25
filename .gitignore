@@ -22,6 +22,12 @@
 # it as a submodule.
 /faq/
 
+# Records requests and other working spreadsheets. This repo is public, so
+# nothing lands in it without being looked at first.
+/Pub.Rec.*
+*.xls
+*.xlsx
+
 .DS_Store
 __pycache__/
 *.pyc

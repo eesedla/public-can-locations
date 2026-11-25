@@ -5,8 +5,9 @@ plotted on aerial imagery. Built for Signal Cleveland.
 
 **Live: https://eesedla.github.io/public-can-locations/**
 
-`public-trashcan-locations/index.html` is the map: one self-contained file,
-nothing to install, drop it on any static host. The `index.html` at the repo
+`public-trashcan-locations/index.html` is the map: one self-contained file —
+the marker is inlined, so there are no relative paths to resolve and it works
+the same on a static host, uploaded as a ZIP, or pasted into a CMS block. The `index.html` at the repo
 root only forwards to it, because GitHub Pages serves a site from the root and
 the build writes each map into its own folder.
 
@@ -102,15 +103,14 @@ Inputs:
 | `data/public-trashcan-locations-geocode-fixes.json` | hand corrections, keyed on the exact address string |
 | `assets/wards.geojson` | 2026 ward boundaries |
 | `assets/template-points.html` | the map itself — real HTML, CSS and JS, edit it directly |
-| `assets/can-glyph.png` | the trash can artwork, copied next to the map. The coloured disc behind it is drawn by the page, so the marker can take its color from the count. |
+| `assets/can-glyph.png` | the trash can artwork, inlined into the map as a data URI. The coloured disc behind it is drawn by the page, so the marker can take its color from the count. |
 | `assets/wordpress-embed-template.html` | the parent-page embed snippet |
 
 Outputs, all regenerated on every run:
 
 | path | what it is |
 | --- | --- |
-| `public-trashcan-locations/index.html` | the map |
-| `public-trashcan-locations/can-glyph.png` | the marker artwork the map loads |
+| `public-trashcan-locations/index.html` | the map — one file, no sibling assets |
 | `public-trashcan-locations/wordpress-embed.html` | the embed snippet |
 | `public-trashcan-locations/by_ward.csv` | the ward summary table behind the map |
 | `public-trashcan-locations/data.csv` | the cleaned location table: address, coordinates, cans at that spot, ward |

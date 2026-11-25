@@ -16,8 +16,9 @@ Inputs
   assets/wards.geojson          City of Cleveland 2026 ward boundaries
   assets/template.html          shared CPD-styled HTML shell (311 datasets)
   assets/template-points.html   shared HTML shell (point datasets)
-  assets/can-glyph.png          the can artwork, copied next to the map;
-                                the coloured disc under it is drawn in the page
+  assets/can-glyph.png          the can artwork, inlined into the map as a
+                                data URI; the coloured disc under it is drawn
+                                in the page
 
 Output, per dataset
 -------------------
@@ -36,6 +37,7 @@ The method, in four steps:
   4. Bin the wards into color classes and write a Leaflet map.
 """
 
+import base64
 import csv
 import json
 import math
@@ -667,13 +669,13 @@ def build_points(ds):
         "caveat": ds["caveat"],
     }
 
-    # The marker bitmap rides alongside index.html rather than being inlined:
-    # it is the one asset the page loads, and a cached PNG beats 100 KB of
-    # base64 re-parsed on every view.
-    marker_out = os.path.join(outdir, os.path.basename(CAN_MARKER_IN))
-    shutil.copyfile(CAN_MARKER_IN, marker_out)
+    # One self-contained file: no sibling image to lose in a ZIP, a CMS upload
+    # or a copy-paste.
+    with open(CAN_MARKER_IN, "rb") as fh:
+        icon_uri = "data:image/png;base64," + base64.b64encode(fh.read()).decode("ascii")
 
-    html = load_points_template().replace("__GEOJSON__", json.dumps(geojson, separators=(",", ":")))
+    html = load_points_template().replace("__CAN_ICON__", icon_uri)
+    html = html.replace("__GEOJSON__", json.dumps(geojson, separators=(",", ":")))
     html = html.replace("__POINTS__", json.dumps(point_features, separators=(",", ":")))
     html = html.replace("__META__", json.dumps(meta, separators=(",", ":")))
     with open(html_out, "w", encoding="utf-8") as fh:
@@ -698,7 +700,6 @@ def build_points(ds):
     print(f"\nwrote {html_out}")
     print(f"wrote {csv_out}")
     print(f"wrote {locations_out}")
-    print(f"wrote {marker_out}")
     print(f"wrote {embed_out}\n")
     return summary
 
