@@ -96,17 +96,17 @@
   .viz-body { display: flex; flex-wrap: wrap; align-items: stretch; }
   .map-wrap {
     position: relative;
-    flex: 1 1 520px;
-    min-width: 300px;
+    flex: 1 1 360px;
+    min-width: 260px;
     height: 560px;
   }
   #map { position: absolute; inset: 0; background: #223; }
   .viz-side {
-    flex: 0 1 320px;
-    min-width: 280px;
+    flex: 0 1 268px;
+    min-width: 230px;
     height: 560px;
     overflow-y: auto;
-    padding: 0 20px 16px;
+    padding: 0 16px 16px;
   }
   .viz-side h2 {
     font-family: var(--rc);
@@ -196,9 +196,9 @@
   }
   .map-btn {
     font-family: var(--rc);
-    font-weight: 500;
-    font-size: 0.78rem;
-    padding: 5px 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 9px 16px;
     border-radius: 2px;
     background: #fff;
     border: 1px solid var(--gray-line);
@@ -294,7 +294,15 @@
      the embed becomes a very long scroll on a phone. */
   @media (max-width: 640px) {
     .map-wrap { height: 420px; }
-    .viz-side { height: 300px; padding: 12px 20px 16px; }
+    /* Stacked under the map, the table runs its full length. A scrollbox
+       inside a page that already scrolls is a trap: readers miss the rows
+       below the fold and the sticky header prints over the first row. */
+    .viz-side {
+      height: auto;
+      overflow: visible;
+      padding: 12px 20px 16px;
+    }
+    .viz-side th { position: static; }
     .legend { top: 8px; right: 8px; padding: 7px 9px; }
     .legend-bubbles { gap: 7px; }
   }
@@ -412,6 +420,10 @@ function leaveHome() { atHome = false; }
 if (window.ResizeObserver) {
   new ResizeObserver(() => {
     map.resize();
+    const sc = iconScale();
+    ["clusters", "can-points"].forEach(id => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "icon-size", sc);
+    });
     if (atHome) map.fitBounds(CITY_BOUNDS, { padding: fitPadding(), duration: 0 });
   }).observe(document.querySelector(".map-wrap"));
 }
@@ -446,8 +458,15 @@ const RAMP = [
 const RING = "#23685b";
 
 function bubbleDiameter(cans) {
-  return Math.min(100, Math.max(26, 22 * Math.pow(cans, 0.28)));
+  return Math.min(124, Math.max(28, 24 * Math.pow(cans, 0.28)));
 }
+// Bubbles are sized for a desktop-width map. On a phone the same art covers
+// a third of the frame, so the whole set scales down with the container.
+function iconScale() {
+  const w = (document.querySelector(".map-wrap") || {}).clientWidth || 560;
+  return Math.max(0.62, Math.min(1, w / 560));
+}
+
 function bubbleFill(cans) {
   return RAMP.find(step => cans <= step.upto).fill;
 }
@@ -577,7 +596,7 @@ function addLayers() {
   map.addSource("cans", {
     type: "geojson",
     cluster: true,
-    clusterRadius: 34,
+    clusterRadius: 44,
     clusterMaxZoom: CLUSTER_MAX_ZOOM,
     // A marker can stand for several cans at one corner, so the bubbles have
     // to add up cans, not markers.
@@ -596,6 +615,7 @@ function addLayers() {
     id: "clusters", type: "symbol", source: "cans", filter: ["has", "point_count"],
     layout: {
       "icon-image": ["concat", "can-", ["to-string", ["get", "cans"]]],
+      "icon-size": iconScale(),
       "icon-allow-overlap": true,
       "icon-ignore-placement": true
     }
@@ -605,6 +625,7 @@ function addLayers() {
     id: "can-points", type: "symbol", source: "cans", filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["concat", "can-", ["to-string", ["get", "n"]]],
+      "icon-size": iconScale(),
       "icon-allow-overlap": true,
       "icon-ignore-placement": true
     }
