@@ -208,6 +208,11 @@
     white-space: nowrap;
   }
   .map-btn:hover { border-color: var(--teal); }
+  /* Set from the ResizeObserver when the map itself is narrow -- a media
+     query only sees the viewport, and beside the ward table the map can be
+     400px wide on a 700px screen, where a row of buttons runs into the
+     legend. */
+  .map-buttons.stack { flex-direction: column; align-items: flex-start; gap: 5px; }
   .map-btn[disabled] { opacity: .6; cursor: default; }
   #reset { display: none; }
   #reset.show { display: block; }
@@ -298,13 +303,21 @@
        inside a page that already scrolls is a trap: readers miss the rows
        below the fold and the sticky header prints over the first row. */
     .viz-side {
+      /* Its own full-width line under the map, then capped and centred so the
+         table sits under the middle of the map rather than hugging one edge
+         with dead space beside it. */
+      flex: 1 1 100%;
+      max-width: 460px;
+      margin: 0 auto;
       height: auto;
       overflow: visible;
       padding: 12px 20px 16px;
     }
     .viz-side th { position: static; }
     .legend { top: 8px; right: 8px; padding: 7px 9px; }
-    .legend-bubbles { gap: 7px; }
+    .legend-title { font-size: 0.66rem; margin-bottom: 4px; }
+    .legend-bubbles { gap: 6px; }
+    .legend-bubble-row { font-size: 0.66rem; }
   }
 
   /* MapLibre's attribution over imagery: keep it legible but quiet. */
@@ -420,6 +433,10 @@ function leaveHome() { atHome = false; }
 if (window.ResizeObserver) {
   new ResizeObserver(() => {
     map.resize();
+    // A row of buttons needs room beside the legend; below that they stack.
+    const wrap = document.querySelector(".map-wrap");
+    const btns = document.querySelector(".map-buttons");
+    if (wrap && btns) btns.classList.toggle("stack", wrap.clientWidth < 520);
     const sc = iconScale();
     ["clusters", "can-points"].forEach(id => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "icon-size", sc);
